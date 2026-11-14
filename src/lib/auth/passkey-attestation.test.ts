@@ -35,7 +35,7 @@ describe("Stap 5: attestation verdicts never block and never over-claim", () => 
     expect(v).toMatchObject({ attested: false, reason: "no_attestation" });
   });
   it("packed self attestation (no x5c) never counts", async () => {
-    const v = await verifyPasskeyAttestation(reg("packed", new Map([["alg", -7], ["sig", new Uint8Array(8)]])), { snapshot: null });
+    const v = await verifyPasskeyAttestation(reg("packed", new Map<string, unknown>([["alg", -7], ["sig", new Uint8Array(8)]])), { snapshot: null });
     expect(v).toMatchObject({ attested: false, reason: "self_attestation" });
   });
   it("packed with x5c but MDS3 unavailable is not attested", async () => {
@@ -60,8 +60,8 @@ describe("Stap 5: attestation verdicts never block and never over-claim", () => 
     const { decodeAttestationObject } = await import("@simplewebauthn/server/helpers");
     const a = decodeAttestationObject(isoBase64URL.toBuffer(s.response.attestationObject));
     expect(a.get("fmt")).toBe("none");
-    expect([...a.get("attStmt").keys()]).toEqual([]);
-    expect(isoBase64URL.fromBuffer(a.get("authData"))).toBe(isoBase64URL.fromBuffer(authData()));
+    expect([...(a.get("attStmt") as unknown as Map<string, unknown>).keys()]).toEqual([]);
+    expect(isoBase64URL.fromBuffer(new Uint8Array(a.get("authData")))).toBe(isoBase64URL.fromBuffer(authData()));
     expect(s.response.clientDataJSON).toBe(r.response.clientDataJSON);
   });
 });
