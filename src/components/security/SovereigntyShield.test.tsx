@@ -26,8 +26,9 @@ const s = (level: 1 | 2 | 3 | null, extra: Partial<SovereigntyHealthScore> = {})
   passkeyStorage: level !== null && level >= 2 ? "device" : null,
   notices: [],
   nextStep: level === 1 ? "add_passkey" : level === 2 ? "add_card" : null,
+  keyMarks: null,
   ...extra,
-});
+} as SovereigntyHealthScore);
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
