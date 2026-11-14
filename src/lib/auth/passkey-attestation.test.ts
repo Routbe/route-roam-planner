@@ -8,7 +8,7 @@ import { pemSha256Hex } from "@/lib/crypto-enclave/fido-pem";
 import { checkBlobHeader, verifyMds3Blob } from "@/lib/crypto-enclave/fido-mds3";
 
 const AAGUID = Uint8Array.from({ length: 16 }, (_, i) => i + 1);
-function authData(aaguid = AAGUID): Uint8Array {
+function authData(aaguid = AAGUID): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(32 + 1 + 4 + 16 + 2 + 16 + 1);
   out[32] = 0x45; // UP | UV | AT
   out.set(aaguid, 37);
@@ -61,7 +61,7 @@ describe("Stap 5: attestation verdicts never block and never over-claim", () => 
     const a = decodeAttestationObject(isoBase64URL.toBuffer(s.response.attestationObject));
     expect(a.get("fmt")).toBe("none");
     expect([...(a.get("attStmt") as unknown as Map<string, unknown>).keys()]).toEqual([]);
-    expect(isoBase64URL.fromBuffer(new Uint8Array(a.get("authData")))).toBe(isoBase64URL.fromBuffer(authData()));
+    expect(isoBase64URL.fromBuffer(new Uint8Array(a.get("authData")))).toBe(isoBase64URL.fromBuffer(new Uint8Array(authData())));
     expect(s.response.clientDataJSON).toBe(r.response.clientDataJSON);
   });
 });
