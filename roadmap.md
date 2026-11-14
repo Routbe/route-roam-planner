@@ -155,7 +155,7 @@
   - [ ] Doorkliktest met een echt ingelogd account (wacht op deploy naar Vercel)
 - [ ] Stap 5: FIDO MDS3-attestatie (Level 9)
   - [x] MDS3 BLOB ophalen, JWS + x5c naar gepinde GlobalSign R3, CRL, serienummer, cache; attestatie-engine (packed/tpm/apple), status- en certificatiecontrole; niveau 3 = kaart + gecertificeerde sleutel; RVE1 pak; db-pending/0271 + rollback; tests
-  - [ ] 0271 op Neon — wacht op handmatige GO eigenaar
+  - [x] 0271 live op Neon (GO eigenaar 2026-11-14)
   - [ ] Android Key: KeyDescription-niveaus en RootOfTrust parsen (telt nu nooit als geattesteerd)
   - [ ] Eerste echte registratie met een beveiligingssleutel na deploy (vereist ROUT_VAULT_KEK)
 - [ ] Stap 6: herstel v4 (2-van-3 zonder kaart, 3-van-4 met kaart); 0268/0269 herschrijven volgens het TLA+-model (verse mastergeneratie per ceremonie, tweede step-up bij terugschalen, idempotentiesleutels, TTL op wachtende ceremonie) + PGlite-test die TLC-sporen naspeelt

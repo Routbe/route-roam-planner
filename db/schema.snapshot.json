@@ -26787,7 +26787,7 @@
         {
           "name": "audit_logs_action_check",
           "kind": "c",
-          "def": "CHECK ((action = ANY (ARRAY['step_up_register'::text, 'token_store'::text, 'token_retrieve'::text, 'server_key_register'::text, 'sdm_card_register'::text, 'sdm_recovery_retrieve'::text, 'sdm_recovery_confirm'::text, 'sdm_fleet_register'::text, 'sdm_batch_register'::text, 'sdm_batch_cards_register'::text, 'sdm_tap_begin'::text, 'sdm_tap_confirm'::text, 'sdm_tap_consume'::text, 'sdm_card_activate'::text, 'sdm_batch_list'::text, 'sdm_batch_export'::text, 'sdm_station_register'::text, 'sdm_station_list'::text, 'sdm_station_retire'::text, 'card_step_up_begin'::text, 'card_step_up_complete'::text, 'card_step_up_claim'::text, 'sdm_card_revoke'::text, 'pake_setup_register'::text, 'pake_register'::text, 'pake_signup_register'::text, 'pake_unregister'::text, 'pake_login'::text])))"
+          "def": "CHECK ((action = ANY (ARRAY['step_up_register'::text, 'token_store'::text, 'token_retrieve'::text, 'server_key_register'::text, 'sdm_card_register'::text, 'sdm_recovery_retrieve'::text, 'sdm_recovery_confirm'::text, 'sdm_fleet_register'::text, 'sdm_batch_register'::text, 'sdm_batch_cards_register'::text, 'sdm_tap_begin'::text, 'sdm_tap_confirm'::text, 'sdm_tap_consume'::text, 'sdm_card_activate'::text, 'sdm_batch_list'::text, 'sdm_batch_export'::text, 'sdm_station_register'::text, 'sdm_station_list'::text, 'sdm_station_retire'::text, 'card_step_up_begin'::text, 'card_step_up_complete'::text, 'card_step_up_claim'::text, 'sdm_card_revoke'::text, 'pake_setup_register'::text, 'pake_register'::text, 'pake_signup_register'::text, 'pake_unregister'::text, 'pake_login'::text, 'passkey_attestation_record'::text])))"
         },
         {
           "name": "audit_logs_entry_hash_key",
@@ -27451,6 +27451,128 @@
       "triggers": [
         "CREATE TRIGGER pake_setups_guard BEFORE DELETE OR UPDATE ON vault_enclave.pake_setups FOR EACH ROW EXECUTE FUNCTION vault_enclave.pake_setups_guard()",
         "CREATE TRIGGER pake_setups_no_truncate BEFORE TRUNCATE ON vault_enclave.pake_setups FOR EACH STATEMENT EXECUTE FUNCTION vault_enclave.audit_logs_immutable()"
+      ],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "passkey_attestations",
+      "columns": [
+        {
+          "name": "credential_id",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "auth_user_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "fmt",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "attested",
+          "type": "boolean",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "status_safe",
+          "type": "boolean",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "certified_l3",
+          "type": "boolean",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "envelope",
+          "type": "bytea",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": "clock_timestamp()",
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "passkey_attestations_attested_fmt",
+          "kind": "c",
+          "def": "CHECK (((NOT attested) OR (fmt = ANY (ARRAY['packed'::text, 'tpm'::text, 'apple'::text, 'android-key'::text]))))"
+        },
+        {
+          "name": "passkey_attestations_auth_user_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (auth_user_id) REFERENCES neon_auth.\"user\"(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "passkey_attestations_certified",
+          "kind": "c",
+          "def": "CHECK (((NOT certified_l3) OR (attested AND (status_safe IS TRUE))))"
+        },
+        {
+          "name": "passkey_attestations_credential",
+          "kind": "c",
+          "def": "CHECK (((credential_id ~ '^[A-Za-z0-9_-]+$'::text) AND ((length(credential_id) >= 16) AND (length(credential_id) <= 1366))))"
+        },
+        {
+          "name": "passkey_attestations_envelope_header",
+          "kind": "c",
+          "def": "CHECK (((SUBSTRING(envelope FROM 1 FOR 4) = '\\x52564531'::bytea) AND (get_byte(envelope, 4) = 1) AND (get_byte(envelope, 5) = 8) AND (get_byte(envelope, 6) = 1)))"
+        },
+        {
+          "name": "passkey_attestations_envelope_len",
+          "kind": "c",
+          "def": "CHECK (((octet_length(envelope) >= 1663) AND (octet_length(envelope) <= 8192)))"
+        },
+        {
+          "name": "passkey_attestations_fmt",
+          "kind": "c",
+          "def": "CHECK ((fmt = ANY (ARRAY['none'::text, 'packed'::text, 'tpm'::text, 'apple'::text, 'android-key'::text, 'fido-u2f'::text, 'android-safetynet'::text, 'unknown'::text])))"
+        },
+        {
+          "name": "passkey_attestations_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (credential_id)"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX passkey_attestations_user_idx ON vault_enclave.passkey_attestations USING btree (auth_user_id)"
+      ],
+      "triggers": [
+        "CREATE TRIGGER passkey_attestations_guard BEFORE UPDATE ON vault_enclave.passkey_attestations FOR EACH ROW EXECUTE FUNCTION vault_enclave.passkey_attestations_guard()"
       ],
       "rls": true,
       "forceRls": false,
@@ -30972,6 +31094,12 @@
     },
     {
       "schema": "vault_enclave",
+      "name": "my_passkey_attestations",
+      "args": "",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.my_passkey_attestations()\n RETURNS TABLE(credential_id text, fmt text, attested boolean, status_safe boolean, certified_l3 boolean)\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_auth uuid := vault_enclave.passkey_attestation_identity(vault_enclave.caller_user_id());\nbegin\n  if v_auth is null then return; end if;\n  return query\n    select a.credential_id, a.fmt, a.attested, a.status_safe, a.certified_l3\n      from vault_enclave.passkey_attestations a\n      join neon_auth.passkey p on p.\"credentialID\" = a.credential_id and p.\"userId\" = v_auth::text\n     where a.auth_user_id = v_auth\n     order by a.recorded_at;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
       "name": "pake_login_begin",
       "args": "p_id uuid, p_lookup bytea, p_state_sealed bytea",
       "def": "CREATE OR REPLACE FUNCTION vault_enclave.pake_login_begin(p_id uuid, p_lookup bytea, p_state_sealed bytea)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_now timestamptz := pg_catalog.clock_timestamp();\n  v_rows integer;\nbegin\n  if p_id is null or p_lookup is null or octet_length(p_lookup) <> 32 then return false; end if;\n  if (select pg_catalog.count(*) from vault_enclave.pake_handshakes h\n       where h.lookup_digest = p_lookup and h.claimed_at is null and h.expires_at > v_now) >= 5 then\n    return false;\n  end if;\n  insert into vault_enclave.pake_handshakes (id, lookup_digest, state_sealed, created_at, expires_at)\n  values (p_id, p_lookup, p_state_sealed, v_now, v_now + interval '60 seconds')\n  on conflict do nothing;\n  get diagnostics v_rows = row_count;\n  return v_rows = 1;\nexception when check_violation then\n  return false;\nend $function$"
@@ -31032,6 +31160,18 @@
     },
     {
       "schema": "vault_enclave",
+      "name": "passkey_attestation_identity",
+      "args": "p_caller uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.passkey_attestation_identity(p_caller uuid)\n RETURNS uuid\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select coalesce(\n    (select u.auth_user_id from public.users u where u.id = p_caller),\n    (select au.id from neon_auth.\"user\" au where au.id = p_caller))\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "passkey_attestations_guard",
+      "args": "",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.passkey_attestations_guard()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\nbegin\n  raise exception 'vault_enclave.passkey_attestations rows are immutable';\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
       "name": "pending_card_step_up",
       "args": "",
       "def": "CREATE OR REPLACE FUNCTION vault_enclave.pending_card_step_up()\n RETURNS boolean\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare v_caller uuid := vault_enclave.caller_user_id();\nbegin\n  if v_caller is null then return false; end if;\n  return exists (select 1 from vault_enclave.card_step_up_intents i\n                  where i.user_id = v_caller and i.completed_at is null and i.expires_at > pg_catalog.clock_timestamp());\nend $function$"
@@ -31041,6 +31181,12 @@
       "name": "pow_leading_zero_bits",
       "args": "p bytea",
       "def": "CREATE OR REPLACE FUNCTION vault_enclave.pow_leading_zero_bits(p bytea)\n RETURNS integer\n LANGUAGE plpgsql\n IMMUTABLE STRICT\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  i integer;\n  b integer;\n  n integer := 0;\nbegin\n  for i in 0 .. pg_catalog.octet_length(p) - 1 loop\n    b := pg_catalog.get_byte(p, i);\n    if b = 0 then n := n + 8; continue; end if;\n    while b < 128 loop b := b * 2; n := n + 1; end loop;\n    return n;\n  end loop;\n  return n;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "record_passkey_attestation",
+      "args": "p_credential_id text, p_fmt text, p_attested boolean, p_status_safe boolean, p_certified_l3 boolean, p_envelope bytea",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.record_passkey_attestation(p_credential_id text, p_fmt text, p_attested boolean, p_status_safe boolean, p_certified_l3 boolean, p_envelope bytea)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v_auth uuid;\n  v_rows integer;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'passkey_attestation_record', 'denied', 'no_caller', null); return false;\n  end if;\n  v_auth := vault_enclave.passkey_attestation_identity(v_caller);\n  if v_auth is null then\n    perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'denied', 'no_identity', null); return false;\n  end if;\n  if not exists (\n    select 1 from neon_auth.passkey p\n     where p.\"credentialID\" = p_credential_id and p.\"userId\" = v_auth::text\n       and p.\"createdAt\" > pg_catalog.clock_timestamp() - interval '10 minutes'\n       and p.\"createdAt\" <= pg_catalog.clock_timestamp() + interval '5 seconds') then\n    perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'denied', 'not_own_fresh_passkey', null); return false;\n  end if;\n  begin\n    insert into vault_enclave.passkey_attestations (credential_id, auth_user_id, fmt, attested, status_safe, certified_l3, envelope)\n    values (p_credential_id, v_auth, p_fmt, p_attested, p_status_safe, p_certified_l3, p_envelope)\n    on conflict (credential_id) do nothing;\n    get diagnostics v_rows = row_count;\n  exception when check_violation or not_null_violation then\n    perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'denied', 'malformed', null); return false;\n  end;\n  if v_rows = 0 then\n    perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'denied', 'already_recorded', null); return false;\n  end if;\n  perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'granted',\n    case when p_certified_l3 then 'certified_l3' when p_attested then 'attested' else 'not_attested' end, null);\n  return true;\nend $function$"
     },
     {
       "schema": "vault_enclave",
