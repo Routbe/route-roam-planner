@@ -24,7 +24,16 @@
 (* A transaction interrupted by a dropped connection simply never happened *)
 (* (atomicity), so only drops BETWEEN transactions need modelling.         *)
 (*                                                                         *)
-(* The five boolean constants switch individual protections off. The main *)
+(* Compromised shares (Stap 6, owner decision 2026-11-14): a member may    *)
+(* report a share as compromised (exposed paper, removed passkey); a lost  *)
+(* card at 3of4 counts as compromised by its unlink. While the set `comp`  *)
+(* together with ROUT's server share would reach the threshold, the server *)
+(* hands out its share only with a fresh passkey step-up (the owner), so   *)
+(* whoever holds the compromised shares can never complete the vault with  *)
+(* ROUT's help. Every commit or remove starts a new generation and clears  *)
+(* `comp` (forced rotation); the owner is never locked out (Recoverable).  *)
+(*                                                                         *)
+(* The six boolean constants switch individual protections off. The main  *)
 (* models run with all of them TRUE; each mutant model switches one off    *)
 (* and TLC must then find a counterexample (see run-tlc.sh), which proves  *)
 (* that every invariant really guards something.                           *)
@@ -40,12 +49,13 @@ CONSTANTS Clients,               \* sessions/devices of the SAME member
           RotateGen,             \* every ceremony wraps a fresh master generation
           RequireDowngradeStepUp,\* commit that lowers the level consumes a fresh step-up
           RequireCardConfirm,    \* a 3of4 commit needs the card tap proof
-          UseIdempotency         \* a repeated idempotency key replays the stored answer
+          UseIdempotency,        \* a repeated idempotency key replays the stored answer
+          ContainCompromise      \* no plain server-share release that completes comp
 
 ASSUME /\ Clients # {}
        /\ MaxCeremonies \in Nat \ {0} /\ MaxReq \in Nat \ {0}
        /\ MaxStepUps \in Nat /\ MaxFaults \in Nat
-       /\ {UseCAS, RotateGen, RequireDowngradeStepUp, RequireCardConfirm, UseIdempotency} \subseteq BOOLEAN
+       /\ {UseCAS, RotateGen, RequireDowngradeStepUp, RequireCardConfirm, UseIdempotency, ContainCompromise} \subseteq BOOLEAN
 
 Factors == {"prf", "server", "paper", "card"}
 Pols    == {"2of3", "3of4"}
@@ -84,11 +94,16 @@ VARIABLES
   \* network (HTTP over the pooler)
   msgs, resps,
   \* bookkeeping
-  faults
+  faults,
+  \* compromised shares of the current generation (database)
+  comp,       \* factors reported compromised since the active ceremony committed
+  leak,       \* the server share of this generation went out without step-up while comp would complete it
+  rel         \* the server share of this generation was released at least once
 
 dbVars  == <<cer, level, ver, gen, card, proofs, idem, nextId>>
 cliVars == <<pc, seen, cur, pol, nreq, outReq>>
-vars    == <<dbVars, cardHolds, cliVars, msgs, resps, faults>>
+cmpVars == <<comp, leak, rel>>
+vars    == <<dbVars, cardHolds, cliVars, msgs, resps, faults, cmpVars>>
 
 Pending == {x \in cer : x.status = "pending"}
 Active  == {x \in cer : x.status = "active"}
@@ -132,6 +147,7 @@ Init ==
   /\ pol = [c \in Clients |-> "none"] /\ nreq = [c \in Clients |-> 0]
   /\ outReq = [c \in Clients |-> NoReq]
   /\ msgs = {} /\ resps = {} /\ faults = 0
+  /\ comp = {} /\ leak = FALSE /\ rel = FALSE
 
 -----------------------------------------------------------------------------
 (* Clients. A request carries everything the server needs; nothing else    *)
@@ -360,7 +376,7 @@ SRemove(m) ==
              /\ Answer(m, Resp(m, TRUE, "ok", 0, ver + 1, "none", 0, 0))
              /\ UNCHANGED <<card, nextId>>
 
-Server ==
+ServerTx ==
   \E m \in msgs :
      /\ (Replay(m) \/ SBegin(m) \/ SConfirm(m) \/ SCommit(m) \/ SAbort(m) \/ SRemove(m))
      /\ UNCHANGED <<cardHolds, cliVars, faults>>
@@ -428,17 +444,62 @@ Client(c) ==
   \/ StartBegin(c) \/ StartRemove(c) \/ StartAbortStale(c)
   \/ Progress(c) \/ SkipCard(c) \/ Retry(c) \/ Recv(c)
 
-Fault ==
+\* Opening the active ceremony with the shares in H.
+Dangerous == \E x \in Active : Cardinality((comp \cup {"server"}) \cap F(x.pol)) >= K(x.pol)
+
+\* A new generation (commit, remove) makes every older share worthless: clear comp.
+Track ==
+  IF Active' # Active
+  THEN comp' = {} /\ leak' = FALSE /\ rel' = FALSE
+  ELSE UNCHANGED cmpVars
+
+Server == ServerTx /\ Track
+
+\* The member reports one of the active ceremony's own shares as compromised
+\* (one transaction, bumps the CAS version). Counted as a fault to bound TLC.
+ReportCompromise ==
+  /\ level # "none" /\ faults < MaxFaults
+  /\ \E f \in F(level) \ ({"server"} \cup comp) : comp' = comp \cup {f}
+  /\ ver' = ver + 1 /\ faults' = faults + 1
+  /\ UNCHANGED <<cer, level, gen, card, proofs, idem, nextId, cardHolds, cliVars, msgs, resps, leak, rel>>
+
+\* Recovery asks ROUT for its share WITHOUT a fresh step-up (anyone holding the
+\* member's session or the compromised shares can do this). With a step-up the
+\* owner always gets it; that path adds nothing an attacker could use and is
+\* what keeps Recoverable true, so it needs no action here.
+ReleaseServer ==
+  /\ level # "none"
+  /\ ContainCompromise => ~Dangerous
+  /\ leak' = (leak \/ Dangerous) /\ rel' = TRUE
+  /\ UNCHANGED <<dbVars, cardHolds, cliVars, msgs, resps, faults, comp>>
+
+\* A lost (certified-unlinked) card at 3of4 is a compromised share.
+CardUnlinkC ==
+  /\ CardUnlink
+  /\ comp' = IF level = "3of4" THEN comp \cup {"card"} ELSE comp
+  /\ UNCHANGED <<leak, rel>>
+
+FaultPlain ==
   \/ \E c \in Clients : CardPulled(c) \/ Crash(c)
-  \/ CardUnlink \/ CardRelink \/ DropMsg \/ DropResp
+  \/ CardRelink \/ DropMsg \/ DropResp
+
+Fault ==
+  \/ FaultPlain /\ UNCHANGED cmpVars
+  \/ CardUnlinkC
+  \/ ReportCompromise
 
 Next ==
-  \/ Server \/ (\E c \in Clients : Client(c)) \/ Fault
-  \/ ExpirePending \/ ExpireProof \/ Discard \/ Done
+  \/ Server
+  \/ (\E c \in Clients : Client(c)) /\ UNCHANGED cmpVars
+  \/ Fault
+  \/ (ExpirePending \/ ExpireProof \/ Discard) /\ UNCHANGED cmpVars
+  \/ ReleaseServer
+  \/ Done
 
 Fairness ==
-  /\ WF_vars(Server) /\ WF_vars(ExpirePending) /\ WF_vars(Discard)
-  /\ \A c \in Clients : WF_vars(Recv(c)) /\ WF_vars(Retry(c)) /\ WF_vars(Progress(c))
+  /\ WF_vars(Server) /\ WF_vars(ExpirePending /\ UNCHANGED cmpVars) /\ WF_vars(Discard /\ UNCHANGED cmpVars)
+  /\ \A c \in Clients : /\ WF_vars(Recv(c) /\ UNCHANGED cmpVars) /\ WF_vars(Retry(c) /\ UNCHANGED cmpVars)
+                       /\ WF_vars(Progress(c) /\ UNCHANGED cmpVars)
 
 Spec == Init /\ [][Next]_vars /\ Fairness
 
@@ -455,6 +516,7 @@ TypeOK ==
                     /\ x.cardSt \in {"na", "unconfirmed", "confirmed"}
   /\ pc \in [Clients -> {"idle", "wait", "staged", "cardOk", "ready", "committed"}]
   /\ faults \in 0..MaxFaults
+  /\ comp \subseteq Factors \ {"server"} /\ leak \in BOOLEAN /\ rel \in BOOLEAN
 
 \* (1) At most one active and at most one pending ceremony per member.
 Exclusivity == Cardinality(Active) <= 1 /\ Cardinality(Pending) <= 1
@@ -496,8 +558,17 @@ Recoverable ==
   \A x \in Active :
      Cardinality(F(x.pol) \ (IF card = "linked" /\ cardHolds = x.id THEN {} ELSE {"card"})) >= K(x.pol)
 
+\* (Stap 6) Whoever holds the compromised shares never gets the rest of the
+\* threshold from ROUT: no plain release of the server share of this
+\* generation happened while comp plus the server share would open it.
+CompromiseContained == ~leak
+
+\* Compromise only ever concerns the active generation's own shares.
+CompromiseScoped == (comp # {}) => (level # "none" /\ comp \subseteq F(level))
+
 Invariants == TypeOK /\ Exclusivity /\ LevelConsistent /\ StrictThreshold
               /\ NoHalfOpen /\ NoSplitBrain /\ NoFalseFailure /\ Recoverable
+              /\ CompromiseContained /\ CompromiseScoped
 
 \* (4) Any step that lowers the level consumes a fresh step-up proof in that same step.
 AuthorizedDowngrade ==
@@ -529,5 +600,8 @@ W_CardLost3of4 == ~(card = "unlinked" /\ level = "3of4")
 W_TornCard    == ~(cardHolds = -1 /\ Pending # {})
 W_LateRequest == ~\E m \in msgs : pc[m.c] # "wait" \/ m.n # nreq[m.c]
 W_Replayed    == ~\E c \in Clients : pc[c] = "wait" /\ outReq[c] \in msgs /\ idem[<<c, nreq[c]>>] # NoResp
+W_Compromised == ~(comp # {} /\ level # "none")
+W_Withheld    == ~(Dangerous /\ ~rel)
+W_Released    == ~(rel /\ comp # {})
 W_Concurrent  == ~\E c, d \in Clients : c # d /\ pc[c] \in {"staged", "cardOk", "ready"} /\ pc[d] = "wait"
 =============================================================================

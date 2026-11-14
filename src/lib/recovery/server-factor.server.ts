@@ -12,6 +12,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { wipe } from "@/lib/crypto/wipe";
 import { envelopeKeyId, keyId } from "@/lib/crypto-enclave/pqc-envelope";
 import { factorKeys, openFactorShard, type RecoveryCeremony } from "@/lib/crypto-enclave/recovery-mpc";
+import { v4FactorKeys } from "@/lib/crypto-enclave/recovery-v4";
 
 const SECRET_RE = /^[A-Za-z0-9]{64,512}$/;
 const enc = new TextEncoder();
@@ -67,6 +68,42 @@ export function openServerShard(ceremony: RecoveryCeremony, memberId: string, se
   try {
     sk = factorKeys("server_guardian", s, memberId).secretKey;
     return openFactorShard(ceremony, memberId, "server_guardian", sk);
+  } finally {
+    wipe(s, sk);
+  }
+}
+
+// ---------------------------------------------------------------- recovery v4 (Stap 6)
+
+/** ROUT's v4 server-factor keys use their own HKDF label (no key shared with v3). */
+function factorSecretV4(memberId: string, secret?: string): Uint8Array {
+  const base = factorSecret(memberId, secret);
+  try {
+    return hkdf(sha256, base, enc.encode("rout.recovery.v4.server-factor"), enc.encode(memberId), 32);
+  } finally {
+    wipe(base);
+  }
+}
+
+/** The member's v4 server-factor public key (safe to hand to the browser). */
+export function serverFactorV4PublicKey(memberId: string, secret?: string): Uint8Array {
+  const s = factorSecretV4(memberId, secret);
+  try {
+    const keys = v4FactorKeys("server", s, memberId);
+    wipe(keys.secretKey);
+    return keys.publicKey;
+  } finally {
+    wipe(s);
+  }
+}
+
+/** Runs `fn` with the v4 server-factor secret key, wiped afterwards. */
+export async function withServerFactorV4SecretKey<T>(memberId: string, fn: (secretKey: Uint8Array) => T | Promise<T>, secret?: string): Promise<T> {
+  const s = factorSecretV4(memberId, secret);
+  let sk: Uint8Array | null = null;
+  try {
+    sk = v4FactorKeys("server", s, memberId).secretKey;
+    return await fn(sk);
   } finally {
     wipe(s, sk);
   }

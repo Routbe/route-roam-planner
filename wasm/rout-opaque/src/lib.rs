@@ -18,6 +18,8 @@
 
 use core::slice;
 
+mod sss;
+
 use argon2::{Algorithm, Argon2, Block, Params, Version};
 use generic_array::{ArrayLength, GenericArray};
 use opaque_ke::errors::InternalError;
@@ -249,7 +251,8 @@ fn params_ok(m_kib: u32, t: u32, p: u32) -> bool {
 
 #[no_mangle]
 pub extern "C" fn rout_abi_version() -> u32 {
-    1
+    // 2: adds rout_sss_split / rout_sss_combine (Stap 6); the OPAQUE exports are unchanged.
+    2
 }
 
 #[no_mangle]
@@ -443,5 +446,54 @@ pub unsafe extern "C" fn rout_server_login_finish(state: usize, state_len: usize
         let params = ServerLoginParameters { context: Some(context), identifiers: Identifiers { client: None, server: None } };
         let done = state.finish(ke3, params).map_err(|_| E_PROTOCOL)?;
         write(out_session_key, &done.session_key)
+    })())
+}
+
+// --- Shamir secret sharing (Stap 6, recovery v4)
+
+/// Splits `secret` (1..=64 bytes) into n shares, threshold k (2 <= k <= n <= 16).
+/// Writes n * (1 + len) share bytes and n * 32 commitment bytes. The random
+/// coefficients come from the host CSPRNG into a stack buffer that is zeroized.
+#[no_mangle]
+pub unsafe extern "C" fn rout_sss_split(
+    secret: usize, secret_len: usize, k: u32, n: u32, ctx: usize, ctx_len: usize, out_shares: usize, out_commits: usize,
+) -> i32 {
+    code((|| {
+        let (k, n) = (k as usize, n as usize);
+        if !sss::args_ok(secret_len, k, n, ctx_len) {
+            return Err(E_ARGS);
+        }
+        let secret = input(secret, secret_len).ok_or(E_ARGS)?;
+        let ctx = input(ctx, ctx_len).ok_or(E_ARGS)?;
+        let shares = output(out_shares, n * (1 + secret_len)).ok_or(E_ARGS)?;
+        let commits = output(out_commits, n * sss::COMMIT_LEN).ok_or(E_ARGS)?;
+        let mut random = [0u8; sss::MAX_SECRET * (sss::MAX_SHARES - 1)];
+        let need = (k - 1) * secret_len;
+        HostRng.fill_bytes(&mut random[..need]);
+        let ok = sss::split(secret, k, n, ctx, &mut random[..need], shares, commits);
+        zeroize::Zeroize::zeroize(&mut random[..]);
+        if ok { Ok(()) } else { Err(E_ARGS) }
+    })())
+}
+
+/// Rebuilds the secret from m >= k shares whose commitments all match.
+/// -5: fewer than k shares; -6: a commitment does not match.
+#[no_mangle]
+pub unsafe extern "C" fn rout_sss_combine(
+    shares: usize, m: u32, secret_len: usize, k: u32, commits: usize, ctx: usize, ctx_len: usize, out_secret: usize,
+) -> i32 {
+    code((|| {
+        let m = m as usize;
+        if m == 0 || m > sss::MAX_SHARES || secret_len == 0 || secret_len > sss::MAX_SECRET || ctx_len == 0 || ctx_len > sss::CONTEXT_MAX {
+            return Err(E_ARGS);
+        }
+        let shares = input(shares, m * (1 + secret_len)).ok_or(E_ARGS)?;
+        let commits = input(commits, m * sss::COMMIT_LEN).ok_or(E_ARGS)?;
+        let ctx = input(ctx, ctx_len).ok_or(E_ARGS)?;
+        let out = output(out_secret, secret_len).ok_or(E_ARGS)?;
+        sss::combine(shares, m, secret_len, k as usize, commits, ctx, out).map_err(|e| {
+            out.fill(0);
+            e
+        })
     })())
 }

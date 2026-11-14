@@ -166,3 +166,11 @@
 - [x] Wasm SRI (SHA-384) en reproduceerbare build van de wachtwoordmotor: officiële rustup 1.95.0 (LLVM 22.1.2) vastgezet, pin opnieuw gezet, CI .github/workflows/wasm-reproducible.yml (lokaal 2x uit twee mappen gelijk)
 - [ ] Wasm-CI nazorg: eerste run op GitHub bekijken zodra de code daar staat
 - [ ] Kluis- en herstelschermen ook naar /secure/*
+- [ ] Stap 6: dynamisch herstel v4 (2-van-3 → 3-van-4, TLA+-gevolgd)
+  - [ ] Shamir GF(2^8) constant-time in de gepinde Wasm-engine (officiële toolchain), herbouw + pin
+  - [ ] recovery-v4.ts: generaties, beleid 2of3/3of4, commitments, uitsluiting gecompromitteerd deel, herinpakken
+  - [ ] TLA+: gecompromitteerd deel (CompromiseContained + mutant + getuigen), TLC groen
+  - [ ] db-pending/0272 + rollback (vault_enclave, deny-all, definers, audit-acties, TTL 10 min); 0268/0269 naar db-archive
+  - [ ] Server-stappen + vault-port, TS-toestandsmachine + conformiteitstest tegen PGlite
+  - [ ] Tests: 3-uit-4, 2-uit-4 faalt, foute hash, rotatie, nul-geheugen, PGlite 0272 + rollback; volledige suite + typecheck
+  - [ ] 0272 op Neon — wacht op handmatige GO eigenaar
