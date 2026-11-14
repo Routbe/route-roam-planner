@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
- * db-pending/0271 (Stap 5, FIDO MDS3 passkey attestation; NOT applied to Neon) and
- * its rollback, replayed on PGlite over every migration in db/. Drives the real
+ * db/0271 (Stap 5, FIDO MDS3 passkey attestation; live on Neon 2026-11-14) and
+ * its rollback (db-pending/), replayed on PGlite over every migration in db/ before 0271. Drives the real
  * vault adapter as rout_app and the real RVE1 pak sealing under a test KEK.
  */
 import { PGlite } from "@electric-sql/pglite";
@@ -15,7 +15,8 @@ import { LocalPostgresVaultAdapter, type VaultSqlExecutor } from "@/lib/vault/va
 import { recordVerdict } from "@/lib/auth/passkey-attestation-record.server";
 
 const ROOT = join(__dirname, "..", "..");
-const SQL = readFileSync(join(ROOT, "db-pending", "0271_fido_mds3_attestation.sql"), "utf8");
+const FILE_0271 = "0271_fido_mds3_attestation.sql";
+const SQL = readFileSync(join(ROOT, "db", FILE_0271), "utf8");
 const ROLLBACK = readFileSync(join(ROOT, "db-pending", "0271_fido_mds3_attestation_rollback.sql"), "utf8");
 const MEMBER = "00000000-0000-4000-8000-0000000000d1";
 const AUTH = "00000000-0000-4000-8000-0000000000a1";
@@ -50,7 +51,7 @@ describe("0271 passkey attestation on a replay of db/", () => {
     db = await PGlite.create({ extensions: { pgcrypto, btree_gist } });
     const dir = join(ROOT, "db");
     for (const step of planMigrations(listMigrationFiles(dir), new Set())) {
-      if (step.action === "run") await db.exec(`begin;\n${readFileSync(join(dir, step.file), "utf8")}\n;commit;`);
+      if (step.action === "run" && step.file !== FILE_0271) await db.exec(`begin;\n${readFileSync(join(dir, step.file), "utf8")}\n;commit;`);
     }
     await db.query(`insert into neon_auth."user" (id, name, email, "emailVerified", "createdAt", "updatedAt") values ($1,'m','m@example.test',true,now(),now()), ($2,'o','o@example.test',true,now(),now())`, [AUTH, OTHER]);
     await db.query("insert into public.users (id, email, auth_user_id) values ($1, 'm@example.test', $2)", [MEMBER, AUTH]);
