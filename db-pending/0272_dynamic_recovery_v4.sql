@@ -271,3 +271,289 @@ create function vault_enclave.recovery_v4_key_ok(p_key text) returns boolean
 language sql immutable set search_path = pg_catalog, pg_temp as $$
   select p_key is not null and p_key ~ '^[A-Za-z0-9_-]+$' and length(p_key) between 16 and 64
 $$;
+
+-- ---------------------------------------------------------------- SBegin
+
+create function vault_enclave.recovery_v4_begin(
+  p_idem text, p_ver bigint, p_kind text, p_policy text, p_proof uuid,
+  p_ceremony uuid, p_generation integer, p_pending_root bytea,
+  p_shard_user_kek bytea, p_shard_server bytea, p_shard_paper bytea, p_shard_card bytea,
+  p_commit_user_kek bytea, p_commit_server bytea, p_commit_paper bytea, p_commit_card bytea)
+returns jsonb language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+  v_ids record;
+  v_digest bytea;
+  v_prev jsonb;
+  v_why text;
+  v_ans jsonb;
+begin
+  if v_caller is null then
+    perform vault_enclave.append_audit(null, 'recovery_v4_begin', 'denied', 'no_caller', null);
+    return vault_enclave.recovery_v4_answer('begin', false, 'no_caller', null, null, null, null, null);
+  end if;
+  if not vault_enclave.recovery_v4_key_ok(p_idem) then
+    perform vault_enclave.append_audit(v_caller, 'recovery_v4_begin', 'denied', 'bad_key', null);
+    return vault_enclave.recovery_v4_answer('begin', false, 'malformed', null, null, null, null, null);
+  end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  v_digest := vault_enclave.recovery_v4_digest(array['begin', p_ver::text, p_kind, p_policy, p_proof::text, p_ceremony::text,
+    p_generation::text, pg_catalog.encode(pg_catalog.sha256(coalesce(p_pending_root, '')), 'hex'),
+    pg_catalog.encode(pg_catalog.sha256(coalesce(p_shard_user_kek, '') || coalesce(p_shard_server, '') || coalesce(p_shard_paper, '')
+      || coalesce(p_shard_card, '') || coalesce(p_commit_user_kek, '') || coalesce(p_commit_server, '')
+      || coalesce(p_commit_paper, '') || coalesce(p_commit_card, '')), 'hex')]);
+  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'begin', v_digest);
+  if v_prev is not null then return v_prev; end if;
+  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);
+
+  v_why := case
+    when p_ver is distinct from v.ver then 'conflict'
+    when v_ids.p_pend is not null then 'busy'
+    when not vault_enclave.recovery_v4_begin_ok(v.level, p_kind, p_policy) then 'invalid'
+    when not vault_enclave.recovery_v4_fresh(v_caller, p_proof) then 'stepup'
+    when p_ceremony is null or p_generation is distinct from v.next_generation
+      or exists (select 1 from vault_enclave.recovery_v4_ceremonies c where c.ceremony_id = p_ceremony)
+      or not vault_enclave.recovery_v4_is_mpc(p_pending_root, 72)
+      or not vault_enclave.recovery_v4_is_mpc(p_shard_user_kek, 33)
+      or not vault_enclave.recovery_v4_is_mpc(p_shard_server, 33)
+      or not vault_enclave.recovery_v4_is_mpc(p_shard_paper, 33)
+      or (p_policy = '3of4') <> (p_shard_card is not null)
+      or (p_shard_card is not null and not vault_enclave.recovery_v4_is_mpc(p_shard_card, 33))
+      or coalesce(octet_length(p_commit_user_kek), 0) <> 32 or coalesce(octet_length(p_commit_server), 0) <> 32
+      or coalesce(octet_length(p_commit_paper), 0) <> 32
+      or (p_policy = '3of4') <> (p_commit_card is not null) or coalesce(octet_length(p_commit_card), 32) <> 32
+      then 'malformed'
+    else 'ok' end;
+  if v_why <> 'ok' then
+    v_ans := vault_enclave.recovery_v4_answer('begin', false, v_why, null, v.ver, v.level, v_ids.p_pend, v_ids.p_act);
+    perform vault_enclave.append_audit(v_caller, 'recovery_v4_begin', 'denied', v_why, null);
+    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'begin', v_digest, v_ans);
+  end if;
+
+  insert into vault_enclave.recovery_v4_ceremonies (ceremony_id, user_id, kind, policy, generation, status, created_at, expires_at,
+    pending_root, shard_user_kek, shard_server, shard_paper, shard_card, commit_user_kek, commit_server, commit_paper, commit_card)
+  select p_ceremony, v_caller, p_kind, p_policy, p_generation, 'pending', t.now, t.now + interval '10 minutes',
+    p_pending_root, p_shard_user_kek, p_shard_server, p_shard_paper, p_shard_card,
+    p_commit_user_kek, p_commit_server, p_commit_paper, p_commit_card
+  from (select pg_catalog.clock_timestamp() as now) t;
+  update vault_enclave.recovery_v4_vaults set ver = ver + 1, next_generation = next_generation + 1,
+         updated_at = pg_catalog.clock_timestamp() where user_id = v_caller returning * into v;
+  perform vault_enclave.recovery_v4_consume(v_caller, p_proof);
+  v_ans := vault_enclave.recovery_v4_answer('begin', true, 'ok', p_ceremony, v.ver, v.level, p_ceremony, v_ids.p_act);
+  perform vault_enclave.append_audit(v_caller, 'recovery_v4_begin', 'granted', p_kind || ':' || p_policy, null);
+  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'begin', v_digest, v_ans);
+end $$;
+
+-- ---------------------------------------------------------------- SConfirm
+
+-- The tap grant (purpose recovery_factor, db/0267) proves the caller's own,
+-- unrevoked card during this ceremony; the card id is kept and re-checked at commit.
+create function vault_enclave.recovery_v4_confirm_card(p_idem text, p_ver bigint, p_ceremony uuid, p_tap_ref text)
+returns jsonb language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+  c vault_enclave.recovery_v4_ceremonies%rowtype;
+  v_ids record;
+  v_digest bytea;
+  v_prev jsonb;
+  v_why text;
+  v_card uuid;
+  v_ok boolean := false;
+  v_ans jsonb;
+begin
+  if v_caller is null then
+    perform vault_enclave.append_audit(null, 'recovery_v4_confirm', 'denied', 'no_caller', null);
+    return vault_enclave.recovery_v4_answer('confirm', false, 'no_caller', null, null, null, null, null);
+  end if;
+  if not vault_enclave.recovery_v4_key_ok(p_idem) then
+    return vault_enclave.recovery_v4_answer('confirm', false, 'malformed', null, null, null, null, null);
+  end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  v_digest := vault_enclave.recovery_v4_digest(array['confirm', p_ver::text, p_ceremony::text,
+    pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(coalesce(p_tap_ref, ''), 'UTF8')), 'hex')]);
+  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'confirm', v_digest);
+  if v_prev is not null then return v_prev; end if;
+  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);
+  select * into c from vault_enclave.recovery_v4_ceremonies x
+   where x.ceremony_id = p_ceremony and x.user_id = v_caller and x.status = 'pending';
+
+  v_why := case
+    when p_ver is distinct from v.ver then 'conflict'
+    when c.ceremony_id is null then 'gone'
+    when c.policy <> '3of4' then 'invalid'
+    else null end;
+  if v_why is null then
+    if p_tap_ref is not null and p_tap_ref ~ '^tap_[0-9a-f]{64}$' then
+      select g.card_id into v_card from vault_enclave.sdm_tap_grants g
+       where g.grant_digest = pg_catalog.sha256(pg_catalog.convert_to(p_tap_ref, 'UTF8'));
+      select t.granted into v_ok from vault_enclave.consume_sdm_tap(p_tap_ref, 'recovery_factor') t;
+    end if;
+    v_why := case when coalesce(v_ok, false) and v_card is not null then 'ok' else 'card' end;
+  end if;
+  if v_why <> 'ok' then
+    v_ans := vault_enclave.recovery_v4_answer('confirm', false, v_why, p_ceremony, v.ver, v.level, v_ids.p_pend, v_ids.p_act);
+    perform vault_enclave.append_audit(v_caller, 'recovery_v4_confirm', 'denied', v_why, null);
+    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'confirm', v_digest, v_ans);
+  end if;
+  update vault_enclave.recovery_v4_ceremonies set card_id = v_card where ceremony_id = p_ceremony;
+  update vault_enclave.recovery_v4_vaults set ver = ver + 1, updated_at = pg_catalog.clock_timestamp()
+   where user_id = v_caller returning * into v;
+  v_ans := vault_enclave.recovery_v4_answer('confirm', true, 'ok', p_ceremony, v.ver, v.level, v_ids.p_pend, v_ids.p_act);
+  perform vault_enclave.append_audit(v_caller, 'recovery_v4_confirm', 'granted', 'ok', null);
+  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'confirm', v_digest, v_ans);
+end $$;
+
+-- ---------------------------------------------------------------- SCommit
+
+-- p_sealed_root: the pending root with ROUT's commit layer removed by the
+-- server (the server opens only its own layer; the root stays sealed under
+-- the generation key). A commit that lowers K consumes a fresh step-up here.
+create function vault_enclave.recovery_v4_commit(p_idem text, p_ver bigint, p_ceremony uuid, p_proof uuid, p_sealed_root bytea)
+returns jsonb language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+  c vault_enclave.recovery_v4_ceremonies%rowtype;
+  v_ids record;
+  v_digest bytea;
+  v_prev jsonb;
+  v_why text;
+  v_card_ok boolean;
+  v_ans jsonb;
+begin
+  if v_caller is null then
+    perform vault_enclave.append_audit(null, 'recovery_v4_commit', 'denied', 'no_caller', null);
+    return vault_enclave.recovery_v4_answer('commit', false, 'no_caller', null, null, null, null, null);
+  end if;
+  if not vault_enclave.recovery_v4_key_ok(p_idem) then
+    return vault_enclave.recovery_v4_answer('commit', false, 'malformed', null, null, null, null, null);
+  end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  v_digest := vault_enclave.recovery_v4_digest(array['commit', p_ver::text, p_ceremony::text, p_proof::text,
+    pg_catalog.encode(pg_catalog.sha256(coalesce(p_sealed_root, '')), 'hex')]);
+  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'commit', v_digest);
+  if v_prev is not null then return v_prev; end if;
+  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);
+  select * into c from vault_enclave.recovery_v4_ceremonies x
+   where x.ceremony_id = p_ceremony and x.user_id = v_caller and x.status = 'pending' for update;
+  -- A card unlinked (revoked) or moved since the tap resets the confirmation (model CardUnlink).
+  if c.ceremony_id is not null and c.card_id is not null then
+    select exists (select 1 from vault_enclave.sdm_batch_cards k
+                    where k.card_id = c.card_id and k.revoked_at is null and k.owner_user_id = v_caller) into v_card_ok;
+    if not v_card_ok then
+      update vault_enclave.recovery_v4_ceremonies set card_id = null where ceremony_id = c.ceremony_id;
+      c.card_id := null;
+    end if;
+  end if;
+
+  v_why := case
+    when p_ver is distinct from v.ver then 'conflict'
+    when c.ceremony_id is null then 'gone'
+    when c.policy = '3of4' and c.card_id is null then 'card'
+    when vault_enclave.recovery_v4_k(c.policy) < vault_enclave.recovery_v4_k(v.level)
+      and not vault_enclave.recovery_v4_fresh(v_caller, p_proof) then 'stepup'
+    when p_sealed_root is null or octet_length(p_sealed_root) <> 72 then 'malformed'
+    else 'ok' end;
+  if v_why <> 'ok' then
+    v_ans := vault_enclave.recovery_v4_answer('commit', false, v_why, p_ceremony, v.ver, v.level, v_ids.p_pend, v_ids.p_act);
+    perform vault_enclave.append_audit(v_caller, 'recovery_v4_commit', 'denied', v_why, null);
+    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'commit', v_digest, v_ans);
+  end if;
+  if v_ids.p_act is not null then
+    perform vault_enclave.recovery_v4_end(v_ids.p_act, 'revoked');
+  end if;
+  update vault_enclave.recovery_v4_ceremonies set status = 'active', pending_root = null, sealed_root = p_sealed_root
+   where ceremony_id = p_ceremony;
+  update vault_enclave.recovery_v4_vaults set level = c.policy, generation = c.generation, compromised = '{}',
+         ver = ver + 1, updated_at = pg_catalog.clock_timestamp()
+   where user_id = v_caller returning * into v;
+  perform vault_enclave.recovery_v4_consume(v_caller, p_proof);
+  v_ans := vault_enclave.recovery_v4_answer('commit', true, 'ok', p_ceremony, v.ver, v.level, null, p_ceremony);
+  perform vault_enclave.append_audit(v_caller, 'recovery_v4_commit', 'granted', c.kind || ':' || c.policy, null);
+  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'commit', v_digest, v_ans);
+end $$;
+
+-- ---------------------------------------------------------------- SAbort
+
+create function vault_enclave.recovery_v4_abort(p_idem text, p_ceremony uuid)
+returns jsonb language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+  v_ids record;
+  v_digest bytea;
+  v_prev jsonb;
+  v_ans jsonb;
+begin
+  if v_caller is null then
+    perform vault_enclave.append_audit(null, 'recovery_v4_abort', 'denied', 'no_caller', null);
+    return vault_enclave.recovery_v4_answer('abort', false, 'no_caller', null, null, null, null, null);
+  end if;
+  if not vault_enclave.recovery_v4_key_ok(p_idem) then
+    return vault_enclave.recovery_v4_answer('abort', false, 'malformed', null, null, null, null, null);
+  end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  v_digest := vault_enclave.recovery_v4_digest(array['abort', p_ceremony::text]);
+  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'abort', v_digest);
+  if v_prev is not null then return v_prev; end if;
+  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);
+  if p_ceremony is null or v_ids.p_pend is distinct from p_ceremony then
+    v_ans := vault_enclave.recovery_v4_answer('abort', false, 'gone', p_ceremony, v.ver, v.level, v_ids.p_pend, v_ids.p_act);
+    perform vault_enclave.append_audit(v_caller, 'recovery_v4_abort', 'denied', 'gone', null);
+    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'abort', v_digest, v_ans);
+  end if;
+  perform vault_enclave.recovery_v4_end(p_ceremony, 'aborted');
+  update vault_enclave.recovery_v4_vaults set ver = ver + 1, updated_at = pg_catalog.clock_timestamp()
+   where user_id = v_caller returning * into v;
+  v_ans := vault_enclave.recovery_v4_answer('abort', true, 'ok', p_ceremony, v.ver, v.level, null, v_ids.p_act);
+  perform vault_enclave.append_audit(v_caller, 'recovery_v4_abort', 'granted', 'ok', null);
+  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'abort', v_digest, v_ans);
+end $$;
+
+-- ---------------------------------------------------------------- SRemove
+
+create function vault_enclave.recovery_v4_remove(p_idem text, p_ver bigint, p_proof uuid)
+returns jsonb language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+  v_ids record;
+  v_digest bytea;
+  v_prev jsonb;
+  v_why text;
+  v_ans jsonb;
+begin
+  if v_caller is null then
+    perform vault_enclave.append_audit(null, 'recovery_v4_remove', 'denied', 'no_caller', null);
+    return vault_enclave.recovery_v4_answer('remove', false, 'no_caller', null, null, null, null, null);
+  end if;
+  if not vault_enclave.recovery_v4_key_ok(p_idem) then
+    return vault_enclave.recovery_v4_answer('remove', false, 'malformed', null, null, null, null, null);
+  end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  v_digest := vault_enclave.recovery_v4_digest(array['remove', p_ver::text, p_proof::text]);
+  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'remove', v_digest);
+  if v_prev is not null then return v_prev; end if;
+  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);
+  v_why := case
+    when p_ver is distinct from v.ver then 'conflict'
+    when v.level = 'none' then 'invalid'
+    when not vault_enclave.recovery_v4_fresh(v_caller, p_proof) then 'stepup'
+    else 'ok' end;
+  if v_why <> 'ok' then
+    v_ans := vault_enclave.recovery_v4_answer('remove', false, v_why, null, v.ver, v.level, v_ids.p_pend, v_ids.p_act);
+    perform vault_enclave.append_audit(v_caller, 'recovery_v4_remove', 'denied', v_why, null);
+    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'remove', v_digest, v_ans);
+  end if;
+  if v_ids.p_act is not null then perform vault_enclave.recovery_v4_end(v_ids.p_act, 'revoked'); end if;
+  if v_ids.p_pend is not null then perform vault_enclave.recovery_v4_end(v_ids.p_pend, 'aborted'); end if;
+  update vault_enclave.recovery_v4_vaults set level = 'none', generation = 0, compromised = '{}',
+         ver = ver + 1, updated_at = pg_catalog.clock_timestamp()
+   where user_id = v_caller returning * into v;
+  perform vault_enclave.recovery_v4_consume(v_caller, p_proof);
+  v_ans := vault_enclave.recovery_v4_answer('remove', true, 'ok', null, v.ver, 'none', null, null);
+  perform vault_enclave.append_audit(v_caller, 'recovery_v4_remove', 'granted', 'ok', null);
+  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'remove', v_digest, v_ans);
+end $$;
