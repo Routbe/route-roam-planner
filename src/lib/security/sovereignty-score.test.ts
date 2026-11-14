@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getSovereigntyHealthScore, shieldChange, type SovereigntyFacts } from "./sovereignty-score";
+import { getSovereigntyHealthScore, keyMarkOf, shieldChange, type KeyMark, type SovereigntyFacts } from "./sovereignty-score";
 
-const base: SovereigntyFacts = { password: false, passkeys: { count: 0, deviceBound: false, synced: false }, card: false, cardState: null, attestedKey: false };
+const base: SovereigntyFacts = { password: false, passkeys: { count: 0, deviceBound: false, synced: false }, card: false, cardState: null, passkeyMarks: [{ name: null, mark: "certified" }] };
+const marks = (...m: KeyMark[]) => m.map((mark) => ({ name: null, mark }));
 const pk = (deviceBound = true, synced = false) => ({ count: 1, deviceBound, synced });
 const score = (f: Partial<SovereigntyFacts>) => getSovereigntyHealthScore({ ...base, ...f });
 
@@ -19,7 +20,7 @@ describe("Veiligheidsschild: levels", () => {
     expect(score({ passkeys: pk() }).nextStep).toBe("add_card");
   });
 
-  it("decision A: an active ROUT Card plus a passkey is level 3 (Hardware-enclave)", () => {
+  it("Stap 5: an active ROUT Card plus a certified hardware passkey is level 3 (Hardware-enclave)", () => {
     const s = score({ passkeys: pk(), card: true, cardState: "active" });
     expect(s.level).toBe(3);
     expect(s.nextStep).toBeNull();
@@ -52,9 +53,48 @@ describe("Veiligheidsschild: levels", () => {
     expect(score({ passkeys: pk(), card: true, cardState: "blocked" }).level).toBe(2);
   });
 
-  it("an attested hardware key (Stap 5) counts for level 3 only together with a passkey", () => {
-    expect(score({ passkeys: pk(), attestedKey: true }).level).toBe(3);
-    expect(score({ password: true, attestedKey: true }).level).toBe(1);
+});
+
+describe("Stap 5: level 3 needs attested certified hardware AND the ROUT Card", () => {
+  it("a certified key without a card stays level 2", () => {
+    expect(score({ passkeys: pk(), passkeyMarks: marks("certified") }).level).toBe(2);
+  });
+
+  it("a card with only an unattested (synced) passkey stays level 2, keeps working and asks for a hardware key", () => {
+    const s = score({ passkeys: pk(false, true), card: true, cardState: "active", passkeyMarks: marks("unattested") });
+    expect(s.level).toBe(2);
+    expect(s.notices).toEqual(["card_needs_certified_key"]);
+    expect(s.nextStep).toBe("add_certified_key");
+  });
+
+  it("attested but not FIPS 140-3 L3 / CC EAL6+ is not enough", () => {
+    expect(score({ passkeys: pk(), card: true, cardState: "active", passkeyMarks: marks("attested") }).level).toBe(2);
+  });
+
+  it("a key MDS3 lists as compromised never counts and is reported", () => {
+    const s = score({ passkeys: pk(), card: true, cardState: "active", passkeyMarks: marks("unsafe") });
+    expect(s.level).toBe(2);
+    expect(s.notices).toContain("key_unsafe");
+  });
+
+  it("one certified key among others is enough", () => {
+    expect(score({ passkeys: { count: 2, deviceBound: true, synced: true }, card: true, cardState: "active", passkeyMarks: marks("unattested", "certified") }).level).toBe(3);
+  });
+
+  it("an unknown key status never raises the level", () => {
+    const s = score({ passkeys: pk(), card: true, cardState: "active", passkeyMarks: null });
+    expect(s.level).toBe(2);
+    expect(s.notices).toContain("key_status_unknown");
+  });
+
+  it("keyMarkOf: certified only when attested, safe and certified; no verdict is unattested", () => {
+    expect(keyMarkOf(null)).toBe("unattested");
+    expect(keyMarkOf({ attested: true, statusSafe: true, certifiedL3: true })).toBe("certified");
+    expect(keyMarkOf({ attested: true, statusSafe: null, certifiedL3: true })).toBe("attested");
+    expect(keyMarkOf({ attested: true, statusSafe: true, certifiedL3: false })).toBe("attested");
+    expect(keyMarkOf({ attested: true, statusSafe: false, certifiedL3: true })).toBe("unsafe");
+    expect(keyMarkOf({ attested: false, statusSafe: false, certifiedL3: false })).toBe("unsafe");
+    expect(keyMarkOf({ attested: false, statusSafe: null, certifiedL3: false })).toBe("unattested");
   });
 });
 
