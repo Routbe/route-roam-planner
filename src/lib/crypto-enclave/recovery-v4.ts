@@ -273,8 +273,10 @@ export async function recoverRootV4(input: {
   try {
     if (c.v !== 4 || c.memberId !== memberId || !V4_POLICIES.includes(c.policy)) throw new RecoveryV4Error();
     checkIds(memberId, c.ceremonyId, c.generation);
-    if (!exactFactors(c.policy, c.shards, (e) => e instanceof Uint8Array) || !exactFactors(c.policy, c.commitments, (x) => x instanceof Uint8Array && x.length === SSS_COMMIT_LEN)) throw new RecoveryV4Error();
     const allowed = POLICY_FACTORS[c.policy];
+    // Commitments: exactly the policy's factors. Shards: a subset (the member's copy never holds ROUT's).
+    if (!exactFactors(c.policy, c.commitments, (x) => x instanceof Uint8Array && x.length === SSS_COMMIT_LEN)) throw new RecoveryV4Error();
+    if (V4_FACTORS.some((f) => c.shards[f] !== undefined && (!allowed.includes(f) || !(c.shards[f] instanceof Uint8Array)))) throw new RecoveryV4Error();
     const used = V4_FACTORS.filter((f) => keys[f] !== undefined || opened[f] !== undefined);
     if (used.some((f) => !allowed.includes(f))) throw new RecoveryV4Error();
     if (used.some((f) => input.exclude?.includes(f))) throw new RecoveryV4Error("factor_compromised");
