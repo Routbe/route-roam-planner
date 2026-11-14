@@ -42,8 +42,12 @@ type Exports = {
   rout_server_register_finish(...a: number[]): number;
   rout_server_login_start(...a: number[]): number;
   rout_server_login_finish(...a: number[]): number;
+  rout_sss_split(...a: number[]): number;
+  rout_sss_combine(...a: number[]): number;
 };
 
+/** ABI 2 = OPAQUE/Argon2id (unchanged) + Shamir secret sharing (Stap 6). */
+export const ENGINE_ABI = 2;
 const PAGE = 65_536;
 const SCRATCH = 64 * 1024;
 const BLOCK_ALIGN = 1024;
@@ -109,6 +113,8 @@ type Frame = {
   take(ptr: number, len: number): Uint8Array;
   /** Reads a u32 little-endian length written by the module. */
   u32(ptr: number): number;
+  /** The frame's linear memory (for writing records in place). */
+  memoryBuffer(): ArrayBuffer;
   blocks: number;
 };
 
@@ -127,7 +133,7 @@ async function withFrame<T>(pages: number, fn: (f: Frame) => T): Promise<T> {
       },
     });
     const ex = instance.exports as unknown as Exports;
-    if (ex.rout_abi_version() !== 1) throw new OpaqueEngineError("opaque_engine_integrity");
+    if (ex.rout_abi_version() !== ENGINE_ABI) throw new OpaqueEngineError("opaque_engine_integrity");
     const base = (ex.rout_heap_base() + 63) & ~63;
     let cursor = base;
     const end = base + SCRATCH;
@@ -151,11 +157,14 @@ async function withFrame<T>(pages: number, fn: (f: Frame) => T): Promise<T> {
       u32(ptr) {
         return new DataView(memory.buffer).getUint32(ptr, true);
       },
+      memoryBuffer() {
+        return memory.buffer;
+      },
       blocks: (end + BLOCK_ALIGN - 1) & ~(BLOCK_ALIGN - 1),
     };
     return fn(frame);
   } catch (e) {
-    if (e instanceof OpaqueEngineError) throw e;
+    if (e instanceof OpaqueEngineError || e instanceof SssError) throw e;
     // A trap (unreachable) or link error: no detail, no oracle.
     throw new OpaqueEngineError("opaque_engine_unavailable");
   } finally {
@@ -380,4 +389,90 @@ export async function serverLoginFinish(state: Uint8Array, ke3: Uint8Array, cont
     check(f.ex.rout_server_login_finish(st, state.length, k3, cx, ctx.length, sk));
     return f.take(sk, OPAQUE_LEN.sessionKey);
   });
+}
+
+// ------------------------------------------------------------------ Shamir (Stap 6)
+
+export const SSS_COMMIT_LEN = 32;
+export const SSS_MAX_SECRET = 64;
+export const SSS_MAX_SHARES = 16;
+
+export class SssError extends Error {
+  constructor(readonly code: "sss_invalid_input" | "sss_below_threshold" | "sss_bad_commitment" | "sss_engine_unavailable") {
+    super(code);
+    this.name = "SssError";
+  }
+}
+
+/** One share: x (1..n) and y (secret length). Caller-owned; wipe y after use. */
+export type SssShare = { x: number; y: Uint8Array };
+
+function sssContext(context: string): Uint8Array {
+  const b = enc.encode(context);
+  if (b.length === 0 || b.length > 256) throw new SssError("sss_invalid_input");
+  return b;
+}
+
+/**
+ * Splits `secret` (1..64 bytes) into `n` shares with threshold `k` inside the
+ * pinned engine. Coefficients never leave Wasm; the engine memory is zero-filled
+ * afterwards. Returns the shares and one SHA-256 commitment per share (public).
+ */
+export async function sssSplit(secret: Uint8Array, k: number, n: number, context: string): Promise<{ shares: SssShare[]; commitments: Uint8Array[] }> {
+  if (!(secret instanceof Uint8Array) || secret.length < 1 || secret.length > SSS_MAX_SECRET) throw new SssError("sss_invalid_input");
+  if (!Number.isInteger(k) || !Number.isInteger(n) || k < 2 || k > n || n > SSS_MAX_SHARES) throw new SssError("sss_invalid_input");
+  const ctx = sssContext(context);
+  const len = secret.length;
+  try {
+    return await withFrame(ENGINE_PAGES.small, (f) => {
+      const ps = f.put(secret);
+      const pc = f.put(ctx);
+      const outShares = f.reserve(n * (1 + len));
+      const outCommits = f.reserve(n * SSS_COMMIT_LEN);
+      if (f.ex.rout_sss_split(ps, len, k, n, pc, ctx.length, outShares, outCommits) !== 0) throw new SssError("sss_invalid_input");
+      const shares: SssShare[] = [];
+      const commitments: Uint8Array[] = [];
+      for (let i = 0; i < n; i++) {
+        const rec = outShares + i * (1 + len);
+        shares.push({ x: f.take(rec, 1)[0]!, y: f.take(rec + 1, len) });
+        commitments.push(f.take(outCommits + i * SSS_COMMIT_LEN, SSS_COMMIT_LEN));
+      }
+      return { shares, commitments };
+    });
+  } catch (e) {
+    throw e instanceof SssError ? e : new SssError("sss_engine_unavailable");
+  }
+}
+
+/** Rebuilds the secret from at least `k` shares whose commitments all match. Caller wipes the result. */
+export async function sssCombine(shares: readonly SssShare[], commitments: readonly Uint8Array[], k: number, context: string): Promise<Uint8Array> {
+  const m = shares.length;
+  if (m === 0 || m > SSS_MAX_SHARES || commitments.length !== m || !Number.isInteger(k) || k < 2) throw new SssError("sss_invalid_input");
+  const len = shares[0]!.y.length;
+  if (len < 1 || len > SSS_MAX_SECRET) throw new SssError("sss_invalid_input");
+  for (const s of shares) if (!(s.y instanceof Uint8Array) || s.y.length !== len || !Number.isInteger(s.x) || s.x < 1 || s.x > 255) throw new SssError("sss_invalid_input");
+  for (const c of commitments) if (!(c instanceof Uint8Array) || c.length !== SSS_COMMIT_LEN) throw new SssError("sss_invalid_input");
+  const ctx = sssContext(context);
+  try {
+    return await withFrame(ENGINE_PAGES.small, (f) => {
+      const ps = f.reserve(m * (1 + len));
+      const view = new Uint8Array(f.memoryBuffer(), ps, m * (1 + len));
+      shares.forEach((s, i) => {
+        view[i * (1 + len)] = s.x;
+        view.set(s.y, i * (1 + len) + 1);
+      });
+      const pcm = f.reserve(m * SSS_COMMIT_LEN);
+      const cview = new Uint8Array(f.memoryBuffer(), pcm, m * SSS_COMMIT_LEN);
+      commitments.forEach((c, i) => cview.set(c, i * SSS_COMMIT_LEN));
+      const pc = f.put(ctx);
+      const out = f.reserve(len);
+      const rc = f.ex.rout_sss_combine(ps, m, len, k, pcm, pc, ctx.length, out);
+      if (rc === -5) throw new SssError("sss_below_threshold");
+      if (rc === -6) throw new SssError("sss_bad_commitment");
+      if (rc !== 0) throw new SssError("sss_invalid_input");
+      return f.take(out, len);
+    });
+  } catch (e) {
+    throw e instanceof SssError ? e : new SssError("sss_engine_unavailable");
+  }
 }
