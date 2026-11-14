@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 /** Owner-keyed: another member's reading can never be shown after an account switch. */
 export const shieldQueryKey = (ownerId: string | null) => ["sovereignty-shield", ownerId] as const;
 
-const UNKNOWN: SovereigntyHealthScore = { level: null, factors: { password: null, passkey: null, card: "unknown" }, passkeyStorage: null, notices: [], nextStep: null };
+const UNKNOWN: SovereigntyHealthScore = { level: null, factors: { password: null, passkey: null, card: "unknown" }, passkeyStorage: null, notices: [], nextStep: null, keyMarks: null };
 
 const LOOK: Record<ShieldLevel | "unknown", { icon: LucideIcon; pill: string }> = {
   1: { icon: ShieldAlert, pill: "bg-shield-basic text-shield-basic-foreground" },
@@ -31,7 +31,7 @@ const LOOK: Record<ShieldLevel | "unknown", { icon: LucideIcon; pill: string }> 
 const TRIGGER_BOX = "relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-0 sm:w-[7.5rem] sm:justify-start";
 const PILL_BOX = "inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-full text-xs font-medium sm:w-full sm:justify-start sm:px-2.5";
 
-const NEXT_LINK = { add_passkey: "security", add_card: "wallet", unfreeze_card: "wallet" } as const;
+const NEXT_LINK = { add_passkey: "security", add_card: "wallet", unfreeze_card: "wallet", add_certified_key: "security" } as const;
 
 /**
  * Veiligheidsschild in the top bar of the signed-in app. Quiet by design: no
@@ -190,6 +190,17 @@ export function ShieldPanel({ score, changeText, onNavigate }: { score: Sovereig
           </li>
         ))}
       </ul>
+
+      {score.keyMarks && score.keyMarks.length > 0 ? (
+        <ul aria-label={t("shield.keys.label")} className="space-y-1 text-foreground">
+          {score.keyMarks.map((k, i) => (
+            <li key={i} className="flex items-center gap-2">
+              {k.mark === "certified" || k.mark === "attested" ? <Check className="h-4 w-4 shrink-0" aria-hidden /> : <Circle className="h-4 w-4 shrink-0" aria-hidden />}
+              <span>{t(`shield.key.${k.mark}`, { name: k.name || t("shield.key.unnamed") })}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         {score.nextStep ? (

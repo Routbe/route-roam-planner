@@ -8,7 +8,7 @@
   "shield.level.3.title": "Enclave matérielle",
   "shield.level.1.body": "Votre mot de passe ne quitte jamais votre appareil (OPAQUE + Argon2id). Ajoutez une passkey ou une ROUT Card pour une protection matérielle.",
   "shield.level.2.body": "Passkey associée : connexion par biométrie ou code PIN, résistante à l'hameçonnage.",
-  "shield.level.3.body": "ROUT Card associée : votre clé se trouve dans une puce que vous tenez vous-même.",
+  "shield.level.3.body": "ROUT Card liée et une clé matérielle certifiée (FIPS 140-3 niveau 3 ou CC EAL6+), confirmée par la FIDO Alliance.",
   "shield.unknown.short": "Statut",
   "shield.unknown.title": "Statut inconnu",
   "shield.unknown.body": "Nous n'avons pas pu vérifier votre sécurité pour le moment. Réessayez plus tard.",
@@ -45,5 +45,15 @@
   "shield.change.down.card_removed": "Votre bouclier est maintenant au niveau {{level}} car votre ROUT Card n'est plus active.",
   "shield.change.down.factor_removed": "Votre bouclier est maintenant au niveau {{level}} car un facteur de sécurité a disparu.",
   "shield.info": "Le bouclier est une information pour vous seul. Il ne décide jamais de l'accès et personne d'autre ne le voit.",
-  "shield.close": "Fermer"
+  "shield.close": "Fermer",
+  "shield.notice.card_needs_certified_key": "Votre ROUT Card est active. L’enclave matérielle demande aussi une passkey sur du matériel certifié, comme une clé de sécurité. Vos passkeys actuelles continuent de fonctionner.",
+  "shield.notice.key_unsafe": "La FIDO Alliance signale un problème de sécurité sur l’une de vos clés. Remplacez-la si possible ; la connexion continue de fonctionner.",
+  "shield.notice.key_status_unknown": "Nous n’avons pas pu vérifier l’état matériel de vos passkeys ; aucun niveau supérieur n’est donc affiché.",
+  "shield.next.add_certified_key": "Ajouter une clé matérielle",
+  "shield.keys.label": "Vos passkeys",
+  "shield.key.certified": "{{name}} : matériel certifié",
+  "shield.key.attested": "{{name}} : matériel authentique, certification insuffisante",
+  "shield.key.unattested": "{{name}} : matériel non confirmé",
+  "shield.key.unsafe": "{{name}} : problème de sécurité signalé",
+  "shield.key.unnamed": "Passkey"
 }

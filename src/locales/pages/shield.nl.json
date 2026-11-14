@@ -8,7 +8,7 @@
   "shield.level.3.title": "Hardware-enclave",
   "shield.level.1.body": "Je wachtwoord verlaat je apparaat nooit (OPAQUE + Argon2id). Voeg een passkey of ROUT Card toe voor hardwarebescherming.",
   "shield.level.2.body": "Passkey gekoppeld: inloggen met biometrie of pincode, bestand tegen phishing.",
-  "shield.level.3.body": "ROUT Card gekoppeld: je sleutel zit in een chip die je zelf vasthoudt.",
+  "shield.level.3.body": "ROUT Card gekoppeld en een gecertificeerde hardwaresleutel (FIPS 140-3 niveau 3 of CC EAL6+), bevestigd door de FIDO Alliance.",
   "shield.unknown.short": "Status",
   "shield.unknown.title": "Status onbekend",
   "shield.unknown.body": "We konden je beveiliging nu niet controleren. Probeer het later opnieuw.",
@@ -45,5 +45,15 @@
   "shield.change.down.card_removed": "Je schild staat nu op {{level}} omdat je ROUT Card niet meer actief is.",
   "shield.change.down.factor_removed": "Je schild staat nu op {{level}} omdat een beveiligingsfactor is weggevallen.",
   "shield.info": "Het schild is alleen informatie voor jou. Het bepaalt geen toegang en niemand anders ziet het.",
-  "shield.close": "Sluiten"
+  "shield.close": "Sluiten",
+  "shield.notice.card_needs_certified_key": "Je ROUT Card is actief. Voor Hardware-enclave is ook een passkey op gecertificeerde hardware nodig, zoals een beveiligingssleutel. Je huidige passkeys blijven gewoon werken.",
+  "shield.notice.key_unsafe": "De FIDO Alliance meldt een beveiligingsprobleem bij een van je sleutels. Vervang die sleutel als je kunt; inloggen blijft werken.",
+  "shield.notice.key_status_unknown": "De hardwarestatus van je passkeys kon niet worden gecontroleerd. We tonen daarom geen hoger niveau.",
+  "shield.next.add_certified_key": "Hardwaresleutel toevoegen",
+  "shield.keys.label": "Je passkeys",
+  "shield.key.certified": "{{name}}: gecertificeerde hardware",
+  "shield.key.attested": "{{name}}: echte hardware, niet hoog genoeg gecertificeerd",
+  "shield.key.unattested": "{{name}}: hardware niet bevestigd",
+  "shield.key.unsafe": "{{name}}: beveiligingsprobleem gemeld",
+  "shield.key.unnamed": "Passkey"
 }
