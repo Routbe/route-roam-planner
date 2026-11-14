@@ -57,7 +57,6 @@ export async function recordVerdict(
     return ok ? "recorded" : "denied";
   } catch (err) {
     console.error("[attestation] record failed", err instanceof Error ? err.name : "error");
-    if (process.env.ATTEST_DEBUG) console.error(err);
     return "error";
   } finally {
     plaintext.fill(0);

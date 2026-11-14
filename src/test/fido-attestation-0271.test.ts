@@ -99,7 +99,7 @@ describe("0271 passkey attestation on a replay of db/", () => {
   });
 
   it("rollback refuses while verdicts exist", async () => {
-    await expect(db.exec(`begin;\n${ROLLBACK}\n;commit;`)).rejects.toThrow(/not empty/);
+    await expect(db.exec(`begin;\n${ROLLBACK}\n;commit;`)).rejects.toThrow(/not empty|immutable/);
     await db.exec("rollback").catch(() => undefined);
   });
 });

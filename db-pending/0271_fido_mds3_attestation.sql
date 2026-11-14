@@ -38,7 +38,7 @@ create table vault_enclave.passkey_attestations (
   certified_l3 boolean not null,
   envelope bytea not null,
   recorded_at timestamptz not null default pg_catalog.clock_timestamp(),
-  constraint passkey_attestations_credential check (credential_id ~ '^[A-Za-z0-9_-]{16,1366}$'),
+  constraint passkey_attestations_credential check (credential_id ~ '^[A-Za-z0-9_-]+$' and length(credential_id) between 16 and 1366),
   constraint passkey_attestations_fmt check (fmt in ('none', 'packed', 'tpm', 'apple', 'android-key', 'fido-u2f', 'android-safetynet', 'unknown')),
   -- Certified only when attested and not listed as compromised.
   constraint passkey_attestations_certified check (not certified_l3 or (attested and status_safe is true)),
