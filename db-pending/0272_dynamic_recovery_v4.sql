@@ -557,3 +557,218 @@ begin
   perform vault_enclave.append_audit(v_caller, 'recovery_v4_remove', 'granted', 'ok', null);
   return vault_enclave.recovery_v4_store(v_caller, p_idem, 'remove', v_digest, v_ans);
 end $$;
+
+-- ---------------------------------------------------------------- ReportCompromise
+
+create function vault_enclave.recovery_v4_report_compromise(p_idem text, p_factor text)
+returns jsonb language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+  v_ids record;
+  v_digest bytea;
+  v_prev jsonb;
+  v_ans jsonb;
+begin
+  if v_caller is null then
+    perform vault_enclave.append_audit(null, 'recovery_v4_compromise', 'denied', 'no_caller', null);
+    return vault_enclave.recovery_v4_answer('compromise', false, 'no_caller', null, null, null, null, null);
+  end if;
+  if not vault_enclave.recovery_v4_key_ok(p_idem) then
+    return vault_enclave.recovery_v4_answer('compromise', false, 'malformed', null, null, null, null, null);
+  end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  v_digest := vault_enclave.recovery_v4_digest(array['compromise', p_factor]);
+  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'compromise', v_digest);
+  if v_prev is not null then return v_prev; end if;
+  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);
+  if v.level = 'none' or p_factor is null or p_factor = 'server'
+     or not (p_factor = any (vault_enclave.recovery_v4_factors(v.level))) or p_factor = any (v.compromised) then
+    v_ans := vault_enclave.recovery_v4_answer('compromise', false, 'invalid', null, v.ver, v.level, v_ids.p_pend, v_ids.p_act);
+    perform vault_enclave.append_audit(v_caller, 'recovery_v4_compromise', 'denied', 'invalid', null);
+    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'compromise', v_digest, v_ans);
+  end if;
+  update vault_enclave.recovery_v4_vaults set compromised = compromised || p_factor, ver = ver + 1,
+         updated_at = pg_catalog.clock_timestamp() where user_id = v_caller returning * into v;
+  v_ans := vault_enclave.recovery_v4_answer('compromise', true, 'ok', null, v.ver, v.level, v_ids.p_pend, v_ids.p_act);
+  perform vault_enclave.append_audit(v_caller, 'recovery_v4_compromise', 'granted', p_factor, null);
+  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'compromise', v_digest, v_ans);
+end $$;
+
+-- ---------------------------------------------------------------- ReleaseServer
+
+-- The server's own share envelope of the active ceremony, for ROUT to open
+-- with its server factor key. The active card counts as compromised once it
+-- is revoked or no longer the caller's (model CardUnlink). If the compromised
+-- shares plus the server share would reach K, only a fresh passkey step-up
+-- (consumed here) releases it; `exclude` lists the shares the client must not
+-- use in a server-assisted recovery. Denials return granted = false.
+create function vault_enclave.recovery_v4_server_share(p_proof uuid)
+returns table (granted boolean, reason text, ceremony_id uuid, generation integer, policy text, shard bytea, exclude text[])
+language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+  c vault_enclave.recovery_v4_ceremonies%rowtype;
+  v_comp text[];
+  v_danger boolean;
+  v_step boolean := false;
+begin
+  if v_caller is null then
+    perform vault_enclave.append_audit(null, 'recovery_v4_server_share', 'denied', 'no_caller', null);
+    return query select false, 'no_caller'::text, null::uuid, null::integer, null::text, null::bytea, null::text[]; return;
+  end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  select * into c from vault_enclave.recovery_v4_ceremonies x where x.user_id = v_caller and x.status = 'active';
+  if c.ceremony_id is null then
+    perform vault_enclave.append_audit(v_caller, 'recovery_v4_server_share', 'denied', 'no_vault', null);
+    return query select false, 'no_vault'::text, null::uuid, null::integer, null::text, null::bytea, null::text[]; return;
+  end if;
+  v_comp := v.compromised;
+  if c.policy = '3of4' and not ('card' = any (v_comp)) and not exists (
+       select 1 from vault_enclave.sdm_batch_cards k where k.card_id = c.card_id and k.revoked_at is null and k.owner_user_id = v_caller) then
+    v_comp := v_comp || 'card'::text;
+  end if;
+  v_danger := pg_catalog.cardinality(v_comp) + 1 >= vault_enclave.recovery_v4_k(c.policy);
+  if v_danger then
+    v_step := vault_enclave.recovery_v4_fresh(v_caller, p_proof);
+    if not v_step then
+      perform vault_enclave.append_audit(v_caller, 'recovery_v4_server_share', 'denied', 'step_up_required', null);
+      return query select false, 'step_up_required'::text, c.ceremony_id, c.generation, c.policy, null::bytea, v_comp; return;
+    end if;
+    perform vault_enclave.recovery_v4_consume(v_caller, p_proof);
+  end if;
+  perform vault_enclave.append_audit(v_caller, 'recovery_v4_server_share', 'granted',
+    case when v_step then 'step_up' when pg_catalog.cardinality(v_comp) > 0 then 'excluding' else 'ok' end, null);
+  return query select true, 'ok'::text, c.ceremony_id, c.generation, c.policy, c.shard_server,
+    case when v_step then '{}'::text[] else v_comp end;
+end $$;
+
+-- ---------------------------------------------------------------- reads (ciphertext / public only)
+
+-- Status of the caller's vault; never a blob.
+create function vault_enclave.recovery_v4_status()
+returns table (level text, ver bigint, generation integer, next_generation integer, compromised text[],
+               pending_id uuid, pending_policy text, pending_expires_at timestamptz, pending_card_confirmed boolean,
+               active_id uuid)
+language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+begin
+  if v_caller is null then return; end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  return query
+    select v.level, v.ver, v.generation, v.next_generation, v.compromised,
+           p.ceremony_id, p.policy, p.expires_at, p.card_id is not null, a.ceremony_id
+      from (select 1) one
+      left join vault_enclave.recovery_v4_ceremonies p on p.user_id = v_caller and p.status = 'pending'
+      left join vault_enclave.recovery_v4_ceremonies a on a.user_id = v_caller and a.status = 'active';
+end $$;
+
+-- The caller's own ceremony material: the active one, or (p_pending) the
+-- pending one so the client can verify its own card share before confirming.
+-- The server share is never returned here.
+create function vault_enclave.recovery_v4_material(p_pending boolean)
+returns table (ceremony_id uuid, kind text, policy text, generation integer, sealed_root bytea, pending_root bytea,
+               shard_user_kek bytea, shard_paper bytea, shard_card bytea,
+               commit_user_kek bytea, commit_server bytea, commit_paper bytea, commit_card bytea)
+language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  v_caller uuid := vault_enclave.caller_user_id();
+  v vault_enclave.recovery_v4_vaults%rowtype;
+begin
+  if v_caller is null then return; end if;
+  v := vault_enclave.recovery_v4_lock(v_caller);
+  return query
+    select c.ceremony_id, c.kind, c.policy, c.generation, c.sealed_root, c.pending_root,
+           c.shard_user_kek, c.shard_paper, c.shard_card, c.commit_user_kek, c.commit_server, c.commit_paper, c.commit_card
+      from vault_enclave.recovery_v4_ceremonies c
+     where c.user_id = v_caller and c.status = case when coalesce(p_pending, false) then 'pending' else 'active' end;
+end $$;
+
+-- Cron: ends every pending ceremony past its TTL (no caller; returns how many).
+create function vault_enclave.recovery_v4_expire_due() returns integer
+language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  r record;
+  n integer := 0;
+begin
+  for r in select c.ceremony_id, c.user_id from vault_enclave.recovery_v4_ceremonies c
+            where c.status = 'pending' and c.expires_at <= pg_catalog.clock_timestamp()
+            order by c.expires_at limit 500 loop
+    perform 1 from vault_enclave.recovery_v4_vaults v where v.user_id = r.user_id for update skip locked;
+    if found then
+      perform vault_enclave.recovery_v4_end(r.ceremony_id, 'aborted');
+      update vault_enclave.recovery_v4_vaults set ver = ver + 1, updated_at = pg_catalog.clock_timestamp() where user_id = r.user_id;
+      perform vault_enclave.append_audit(r.user_id, 'recovery_v4_expire', 'granted', 'ttl', null);
+      n := n + 1;
+    end if;
+  end loop;
+  return n;
+end $$;
+
+-- ---------------------------------------------------------------- rights
+
+revoke all on function vault_enclave.recovery_v4_k(text) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_factors(text) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_begin_ok(text, text, text) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_answer(text, boolean, text, uuid, bigint, text, uuid, uuid) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_fresh(uuid, uuid) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_consume(uuid, uuid) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_end(uuid, text) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_lock(uuid) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_replay(uuid, text, text, bytea) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_store(uuid, text, text, bytea, jsonb) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_ids(uuid) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_digest(text[]) from public, rout_app;
+revoke all on function vault_enclave.recovery_v4_key_ok(text) from public, rout_app;
+
+revoke all on function vault_enclave.recovery_v4_begin(text, bigint, text, text, uuid, uuid, integer, bytea, bytea, bytea, bytea, bytea, bytea, bytea, bytea, bytea) from public;
+revoke all on function vault_enclave.recovery_v4_confirm_card(text, bigint, uuid, text) from public;
+revoke all on function vault_enclave.recovery_v4_commit(text, bigint, uuid, uuid, bytea) from public;
+revoke all on function vault_enclave.recovery_v4_abort(text, uuid) from public;
+revoke all on function vault_enclave.recovery_v4_remove(text, bigint, uuid) from public;
+revoke all on function vault_enclave.recovery_v4_report_compromise(text, text) from public;
+revoke all on function vault_enclave.recovery_v4_server_share(uuid) from public;
+revoke all on function vault_enclave.recovery_v4_status() from public;
+revoke all on function vault_enclave.recovery_v4_material(boolean) from public;
+revoke all on function vault_enclave.recovery_v4_expire_due() from public;
+grant execute on function vault_enclave.recovery_v4_begin(text, bigint, text, text, uuid, uuid, integer, bytea, bytea, bytea, bytea, bytea, bytea, bytea, bytea, bytea) to rout_app;
+grant execute on function vault_enclave.recovery_v4_confirm_card(text, bigint, uuid, text) to rout_app;
+grant execute on function vault_enclave.recovery_v4_commit(text, bigint, uuid, uuid, bytea) to rout_app;
+grant execute on function vault_enclave.recovery_v4_abort(text, uuid) to rout_app;
+grant execute on function vault_enclave.recovery_v4_remove(text, bigint, uuid) to rout_app;
+grant execute on function vault_enclave.recovery_v4_report_compromise(text, text) to rout_app;
+grant execute on function vault_enclave.recovery_v4_server_share(uuid) to rout_app;
+grant execute on function vault_enclave.recovery_v4_status() to rout_app;
+grant execute on function vault_enclave.recovery_v4_material(boolean) to rout_app;
+grant execute on function vault_enclave.recovery_v4_expire_due() to rout_app;
+
+-- In-transaction proof: rout_app and PUBLIC reach no new table, every new
+-- function is pinned and closed to PUBLIC, internal helpers are closed to rout_app.
+do $$
+declare v_bad text;
+begin
+  select string_agg(t, ', ') into v_bad from unnest(array['vault_enclave.recovery_v4_vaults',
+    'vault_enclave.recovery_v4_ceremonies', 'vault_enclave.recovery_v4_idempotency']) t
+   where pg_catalog.has_table_privilege('rout_app', t, 'select') or pg_catalog.has_table_privilege('rout_app', t, 'insert')
+      or pg_catalog.has_table_privilege('rout_app', t, 'update') or pg_catalog.has_table_privilege('rout_app', t, 'delete')
+      or pg_catalog.has_table_privilege('public', t, 'select')
+      or not (select c.relrowsecurity from pg_catalog.pg_class c where c.oid = t::regclass)
+      or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = t::regclass);
+  if v_bad is not null then raise exception '0272: reachable or policy-bearing table %', v_bad; end if;
+  select string_agg(p.proname, ', ') into v_bad from pg_catalog.pg_proc p
+   join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'vault_enclave' and p.proname like 'recovery\_v4\_%'
+     and (not ('search_path=pg_catalog, pg_temp' = any (coalesce(p.proconfig, '{}')))
+          or pg_catalog.has_function_privilege('public', p.oid, 'execute'));
+  if v_bad is not null then raise exception '0272: unpinned or public function %', v_bad; end if;
+  select string_agg(p.proname, ', ') into v_bad from pg_catalog.pg_proc p
+   join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'vault_enclave' and p.proname = any (array['recovery_v4_is_mpc', 'recovery_v4_k', 'recovery_v4_factors',
+     'recovery_v4_begin_ok', 'recovery_v4_answer', 'recovery_v4_fresh', 'recovery_v4_consume', 'recovery_v4_end',
+     'recovery_v4_lock', 'recovery_v4_replay', 'recovery_v4_store', 'recovery_v4_ids', 'recovery_v4_digest', 'recovery_v4_key_ok'])
+     and pg_catalog.has_function_privilege('rout_app', p.oid, 'execute');
+  if v_bad is not null then raise exception '0272: rout_app can execute internal helper %', v_bad; end if;
+end $$;
