@@ -1,7 +1,8 @@
 // @vitest-environment node
 /**
- * db-pending/0272 (Stap 6, dynamic recovery v4) and its rollback, dry-run on
- * PGlite over a replay of every migration in db/. Drives the real v4 engine
+ * db/0272 (Stap 6, dynamic recovery v4; live on Neon 2026-11-14) and its
+ * rollback (db-pending/), on PGlite over a replay of every migration in db/
+ * before 0272. Drives the real v4 engine
  * (Wasm Shamir, RVE1 shards) and the real store as rout_app, step by step as
  * in formal/recovery-v4/RecoveryV4.tla. Nothing here touches Neon.
  */
@@ -19,7 +20,7 @@ import type { VaultSqlExecutor } from "@/lib/vault/vault-port.server";
 
 const ROOT = join(__dirname, "..", "..");
 const FILE = "0272_dynamic_recovery_v4.sql";
-const SQL = readFileSync(join(ROOT, "db-pending", FILE), "utf8");
+const SQL = readFileSync(join(ROOT, "db", FILE), "utf8");
 const ROLLBACK = readFileSync(join(ROOT, "db-pending", "0272_dynamic_recovery_v4_rollback.sql"), "utf8");
 const SERVER_SECRET = "S".repeat(64);
 const MEMBER = "00000000-0000-4000-8000-0000000000d1";
@@ -82,7 +83,7 @@ describe("0272 dynamic recovery v4 on a replay of db/", () => {
     db = await PGlite.create({ extensions: { pgcrypto, btree_gist } });
     const dir = join(ROOT, "db");
     for (const step of planMigrations(listMigrationFiles(dir), new Set())) {
-      if (step.action === "run") await db.exec(`begin;\n${readFileSync(join(dir, step.file), "utf8")}\n;commit;`);
+      if (step.action === "run" && step.file !== FILE) await db.exec(`begin;\n${readFileSync(join(dir, step.file), "utf8")}\n;commit;`);
     }
     await db.query(`insert into neon_auth."user" (id, name, email, "emailVerified", "createdAt", "updatedAt") values ($1,'m','m@example.test',true,now(),now()), ($2,'o','o@example.test',true,now(),now())`, [AUTH, AUTH2]);
     await db.query("insert into public.users (id, email, auth_user_id) values ($1, 'm@example.test', $2), ($3, 'o@example.test', $4)", [MEMBER, AUTH, OTHER, AUTH2]);

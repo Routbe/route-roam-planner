@@ -1,6 +1,8 @@
 // @vitest-environment node
 /**
- * db-pending/0268 (EXPAND) and db-pending/0269 (CONTRACT): recovery vault 3-of-4.
+ * db-archive/0268 (EXPAND) and db-archive/0269 (CONTRACT): the never-applied
+ * recovery v3 drafts, archived 2026-11-14 (owner) after recovery v4 (db/0272) went live.
+ * Kept as a regression record of the v3 SQL; neither file may be in db/.
  * Replays db/ on PGlite, applies the held-back files and runs every function as
  * rout_app with a real transaction context. Checks: put_v3 always stores version
  * 3 with all four distinct shards; the *_v2 reads return it with its version;
@@ -16,8 +18,8 @@ import { definerMigrationViolations } from "../../scripts/security-definer-polic
 
 const ROOT = join(__dirname, "..", "..");
 const DB_DIR = join(ROOT, "db");
-const SQL_0268 = readFileSync(join(ROOT, "db-pending", "0268_recovery_three_of_four.sql"), "utf8");
-const SQL_0269 = readFileSync(join(ROOT, "db-pending", "0269_recovery_three_of_four_contract.sql"), "utf8");
+const SQL_0268 = readFileSync(join(ROOT, "db-archive", "0268_recovery_three_of_four.sql"), "utf8");
+const SQL_0269 = readFileSync(join(ROOT, "db-archive", "0269_recovery_three_of_four_contract.sql"), "utf8");
 
 const ALICE = "00000000-0000-4000-8000-0000000000f1";
 const BOB = "00000000-0000-4000-8000-0000000000f2";
