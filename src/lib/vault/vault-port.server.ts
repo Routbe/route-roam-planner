@@ -88,6 +88,23 @@ export type PakeSetupEnvelope = { readonly kid: Uint8Array; readonly envelope: U
 /** One OPAQUE registration record (192 bytes) and the identifiers it was made under. */
 export type PakeRegistration = { readonly credentialId: Uint8Array; readonly record: Uint8Array; readonly setupKid: Uint8Array };
 export type PakeRegistrationWrite = PakeRegistration & { readonly lookup: Uint8Array };
+/** Stap 5 (db-pending/0271): one verdict per WebAuthn credential, envelope kind pak. */
+export const PASSKEY_ATTESTATION_FORMATS = ["none", "packed", "tpm", "apple", "android-key", "fido-u2f", "android-safetynet", "unknown"] as const;
+export type PasskeyAttestationWrite = {
+  readonly credentialId: string;
+  readonly fmt: (typeof PASSKEY_ATTESTATION_FORMATS)[number];
+  readonly attested: boolean;
+  readonly statusSafe: boolean | null;
+  readonly certifiedL3: boolean;
+  readonly envelope: Uint8Array;
+};
+export type PasskeyAttestationFlags = {
+  readonly credentialId: string;
+  readonly fmt: (typeof PASSKEY_ATTESTATION_FORMATS)[number];
+  readonly attested: boolean;
+  readonly statusSafe: boolean | null;
+  readonly certifiedL3: boolean;
+};
 export const AUTH_POW_PURPOSES = ["opaque_login", "opaque_signup", "opaque_register"] as const;
 export type AuthPowPurpose = (typeof AUTH_POW_PURPOSES)[number];
 /** A one-time Hashcash challenge minted on the database clock. */
@@ -110,6 +127,12 @@ export interface IVaultPort {
   pakeRegistrationForLogin(lookup: Uint8Array): Promise<PakeRegistration | null>;
   /** Whether a Better Auth identity has an OPAQUE password. */
   pakeRegistered(authUserId: string): Promise<boolean>;
+  /** Whether db/0271 (passkey attestation, Stap 5) is installed. */
+  passkeyAttestationAvailable(): Promise<boolean>;
+  /** Records the verdict for the caller's own fresh passkey, once; false when denied. */
+  recordPasskeyAttestation(caller: VaultCaller, write: PasskeyAttestationWrite): Promise<boolean>;
+  /** Non-secret flags of the caller's own passkeys (never the envelope). */
+  passkeyAttestationFlags(caller: VaultCaller): Promise<readonly PasskeyAttestationFlags[]>;
   /** Signed-in member sets or replaces their password; spends a fresh passkey proof. */
   storePakeRegistration(caller: VaultCaller, reg: PakeRegistrationWrite, stepUp: PasskeyStepUp): Promise<boolean>;
   /** New account by password: caller is the fresh Better Auth identity. */
@@ -214,6 +237,13 @@ function fromHex(hex: string): Uint8Array {
   return out;
 }
 
+const AttestationFlagRow = z.object({
+  credential_id: z.string().regex(/^[A-Za-z0-9_-]{16,1366}$/),
+  fmt: z.enum(["none", "packed", "tpm", "apple", "android-key", "fido-u2f", "android-safetynet", "unknown"]),
+  attested: z.boolean(),
+  status_safe: z.boolean().nullable(),
+  certified_l3: z.boolean(),
+});
 const RegisterRow = z.object({ ok: z.boolean() });
 const StoreRow = z.object({ ref: z.string().nullable() });
 const RetrieveRow = z.object({
@@ -379,6 +409,31 @@ export class LocalPostgresVaultAdapter implements IVaultPort {
     const row = PakeRegRow.safeParse(rows[0]);
     if (!row.success) throw new VaultDeniedError();
     return { credentialId: fromHex(row.data.credential_id_hex), record: fromHex(row.data.record_hex), setupKid: fromHex(row.data.setup_kid_hex) };
+  }
+
+  async passkeyAttestationAvailable(): Promise<boolean> {
+    const rows = await this.exec(NO_CALLER, "select to_regprocedure('vault_enclave.record_passkey_attestation(text, text, boolean, boolean, boolean, bytea)') is not null as ok", []);
+    return okOf(rows);
+  }
+
+  async recordPasskeyAttestation(caller: VaultCaller, w: PasskeyAttestationWrite): Promise<boolean> {
+    if (!/^[A-Za-z0-9_-]{16,1366}$/.test(w.credentialId) || !PASSKEY_ATTESTATION_FORMATS.includes(w.fmt)) throw new VaultDeniedError();
+    if (w.envelope.length < 1663 || w.envelope.length > 8192) throw new VaultDeniedError();
+    const rows = await this.exec(
+      callerId(caller),
+      "select vault_enclave.record_passkey_attestation($1, $2, $3::boolean, $4::boolean, $5::boolean, decode($6, 'hex')) as ok",
+      [w.credentialId, w.fmt, w.attested, w.statusSafe, w.certifiedL3 && w.attested && w.statusSafe === true, toHex(w.envelope)],
+    );
+    return okOf(rows);
+  }
+
+  async passkeyAttestationFlags(caller: VaultCaller): Promise<readonly PasskeyAttestationFlags[]> {
+    const rows = await this.exec(callerId(caller), "select credential_id, fmt, attested, status_safe, certified_l3 from vault_enclave.my_passkey_attestations()", []);
+    return rows.map((r) => {
+      const p = AttestationFlagRow.safeParse(r);
+      if (!p.success) throw new VaultDeniedError();
+      return { credentialId: p.data.credential_id, fmt: p.data.fmt, attested: p.data.attested, statusSafe: p.data.status_safe, certifiedL3: p.data.certified_l3 };
+    });
   }
 
   async pakeRegistered(authUserId: string): Promise<boolean> {
