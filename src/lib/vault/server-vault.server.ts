@@ -175,3 +175,49 @@ export async function openPakeSetup(envelope: Uint8Array, deps: { port?: IVaultP
     if (!deps.kek) kek.dispose();
   }
 }
+
+// ---------------------------------------------------------------- passkey attestation (pak, Stap 5)
+
+/** Binds the envelope to one credential: moved to another passkey row, it no longer opens. */
+export function passkeyAttestationContext(credentialId: string): string {
+  if (!/^[A-Za-z0-9_-]{16,1366}$/.test(credentialId)) throw new VaultDeniedError();
+  return `rout.passkey.attestation.v1|${credentialId}`;
+}
+
+/** Seals the full attestation verdict for the server vault (RVE1 kind pak, holder server vault). */
+export async function sealPasskeyAttestation(
+  caller: VaultCaller,
+  credentialId: string,
+  plaintext: Uint8Array,
+  deps: { port?: IVaultPort; kek?: VaultKek } = {},
+): Promise<Uint8Array> {
+  const port = deps.port ?? vaultPort();
+  const kek = deps.kek ?? vaultKekFromEnv();
+  try {
+    const recipientPublicKey = await activeRecipient(port, caller, kek);
+    return sealEnvelope({ kind: "pak", holder: "server_vault", recipientPublicKey, plaintext, context: passkeyAttestationContext(credentialId) });
+  } finally {
+    if (!deps.kek) kek.dispose();
+  }
+}
+
+/** Opens a pak envelope (audits and admin tooling only); needs the Master KEK. */
+export async function openPasskeyAttestation(
+  credentialId: string,
+  envelope: Uint8Array,
+  deps: { port?: IVaultPort; kek?: VaultKek } = {},
+): Promise<Uint8Array> {
+  const port = deps.port ?? vaultPort();
+  const kek = deps.kek ?? vaultKekFromEnv();
+  try {
+    const key = await port.systemServerKey(envelopeKeyId(envelope));
+    if (!key) throw new VaultDeniedError();
+    return withServerSeed(kek, key, (secretKey) =>
+      openEnvelope({ envelope, expectedKind: "pak", holder: "server_vault", secretKey, context: passkeyAttestationContext(credentialId) }),
+    );
+  } catch (error) {
+    throw error instanceof VaultDeniedError || error instanceof VaultKekMissingError ? error : new VaultDeniedError();
+  } finally {
+    if (!deps.kek) kek.dispose();
+  }
+}
