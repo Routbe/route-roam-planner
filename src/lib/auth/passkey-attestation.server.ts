@@ -185,14 +185,15 @@ export async function verifyPasskeyAttestation(response: RegistrationResponseJSO
     installPinnedAttestationRoots();
     if (snapshot) await loadMetadata(snapshot);
     const { verifyRegistrationResponse } = await import("@simplewebauthn/server");
+    const { decodeClientDataJSON } = await import("@simplewebauthn/server/helpers");
+    const origin = decodeClientDataJSON(response.response.clientDataJSON).origin;
     const result = await verifyRegistrationResponse({
       response,
       // Binding is enforced by Better Auth on this same clientDataJSON; here only the statement counts.
       expectedChallenge: () => true,
-      expectedOrigin: () => true,
-      expectedRPID: undefined,
+      expectedOrigin: origin,
       requireUserVerification: false,
-    } as never);
+    });
     if (!result.verified) return { attested: false, ...base, reason: "verification_failed", statusSafe: safe };
   } catch {
     return { attested: false, ...base, reason: "verification_failed", statusSafe: safe };
