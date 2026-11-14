@@ -83,13 +83,35 @@ card, a dead session's late request, a replayed answer, two sessions racing).
    that only the clock (or another session's abort) can end.
 6. **The server checks the card proof itself** — a client that skips the card
    step must be refused (`mutants/NoCardConfirm.cfg`).
+7. **Compromised shares are contained** (Stap 6): a reported share is excluded,
+   and ROUT's share is released without a fresh step-up only while the
+   compromised shares plus ROUT's stay below the threshold
+   (`CompromiseContained`, `CompromiseScoped`; `mutants/NoCompromiseContainment.cfg`).
+   Any commit or remove clears the set (forced rotation). Owner decision
+   2026-11-14: the pending TTL is 10 minutes on the database clock.
+
+## Implementation map (Stap 6)
+
+| model action       | SQL (db-pending/0272)                 | TypeScript                                  |
+|--------------------|---------------------------------------|---------------------------------------------|
+| `SBegin`           | `recovery_v4_begin`                   | `stageCeremonyV4` + `RecoveryV4Store.begin` |
+| `SConfirm`         | `recovery_v4_confirm_card`            | `RecoveryV4Store.confirmCard`               |
+| `SCommit`          | `recovery_v4_commit`                  | `commitPendingRoot` + `RecoveryV4Store.commit` |
+| `SAbort`/`SRemove` | `recovery_v4_abort` / `_remove`       | `RecoveryV4Store.abort` / `.remove`         |
+| `ExpirePending`    | lazy in `recovery_v4_lock`, `recovery_v4_expire_due` | `RecoveryV4Store.expireDue`  |
+| `Replay`           | `recovery_v4_idempotency`             | idempotency key per call                    |
+| `ReportCompromise` | `recovery_v4_report_compromise`       | `RecoveryV4Store.reportCompromise`          |
+| `ReleaseServer`    | `recovery_v4_server_share`            | `RecoveryV4Store.releaseServerShare`        |
+
+`src/test/recovery-v4-0272.test.ts` drives these steps on a PGlite replay.
 
 ## Limits
 
 Bounded model checking: results hold for the constants in each `.cfg`
 (2 sessions, 3 ceremonies, 3–4 requests per session, 2 step-ups, up to 2
 faults), not for every size. The model is about the protocol; whether the SQL
-and TypeScript follow it is checked by tests in step 6. Cryptography is
+and TypeScript follow it is checked by `src/test/recovery-v4-0272.test.ts`
+(scenario tests per action, not an automatic replay of TLC traces). Cryptography is
 abstracted to share counting.
 
 ## Run

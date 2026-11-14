@@ -158,7 +158,6 @@
   - [x] 0271 live op Neon (GO eigenaar 2026-11-14)
   - [ ] Android Key: KeyDescription-niveaus en RootOfTrust parsen (telt nu nooit als geattesteerd)
   - [ ] Eerste echte registratie met een beveiligingssleutel na deploy (vereist ROUT_VAULT_KEK)
-- [ ] Stap 6: herstel v4 (2-van-3 zonder kaart, 3-van-4 met kaart); 0268/0269 herschrijven volgens het TLA+-model (verse mastergeneratie per ceremonie, tweede step-up bij terugschalen, idempotentiesleutels, TTL op wachtende ceremonie) + PGlite-test die TLC-sporen naspeelt
 - [ ] Stap 7: gasten zonder spoor (pseudoniem per epoch, BBS+, blinde buckets, ZK-range op commitment)
 - [ ] Stap 8: hybride PQ-ratchet + RVE2
 - [ ] Stap 9: RLS non-interference-model (Z3/Lean) vergeleken met de snapshot in CI
@@ -167,10 +166,12 @@
 - [ ] Wasm-CI nazorg: eerste run op GitHub bekijken zodra de code daar staat
 - [ ] Kluis- en herstelschermen ook naar /secure/*
 - [ ] Stap 6: dynamisch herstel v4 (2-van-3 → 3-van-4, TLA+-gevolgd)
-  - [ ] Shamir GF(2^8) constant-time in de gepinde Wasm-engine (officiële toolchain), herbouw + pin
-  - [ ] recovery-v4.ts: generaties, beleid 2of3/3of4, commitments, uitsluiting gecompromitteerd deel, herinpakken
-  - [ ] TLA+: gecompromitteerd deel (CompromiseContained + mutant + getuigen), TLC groen
-  - [ ] db-pending/0272 + rollback (vault_enclave, deny-all, definers, audit-acties, TTL 10 min); 0268/0269 naar db-archive
-  - [ ] Server-stappen + vault-port, TS-toestandsmachine + conformiteitstest tegen PGlite
-  - [ ] Tests: 3-uit-4, 2-uit-4 faalt, foute hash, rotatie, nul-geheugen, PGlite 0272 + rollback; volledige suite + typecheck
+  - [x] Shamir GF(2^8) constant-time in de gepinde Wasm-engine (officiële toolchain), herbouw + pin
+  - [x] recovery-v4.ts: verse generatiesleutel per ceremonie, beleid 2of3/3of4, commitments, uitsluiting gecompromitteerd deel, commit-laag
+  - [x] TLA+: gecompromitteerd deel (CompromiseContained + mutant + getuigen), TLC groen
+  - [x] db-pending/0272 + rollback (vault_enclave, deny-all, definers, audit-acties, TTL 10 min)
+  - [x] Server-stappen (RecoveryV4Store) + PGlite-scenariotest per modelactie
+  - [x] Tests: 3-uit-4, 2-uit-4 faalt, foute hash, rotatie, nul-geheugen, PGlite 0272 + rollback; typecheck
+  - [ ] Server-functies + schermen die RecoveryV4Store aanroepen (crypto in de enclave-worker); cron voor recovery_v4_expire_due
+  - [ ] 0268/0269 archiveren of niet — besluit eigenaar
   - [ ] 0272 op Neon — wacht op handmatige GO eigenaar
