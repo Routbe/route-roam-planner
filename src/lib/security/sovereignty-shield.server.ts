@@ -5,7 +5,7 @@
  * card freeze state (card_freezes via rout_card_status_by_serial). Every failed lookup
  * becomes null, never "present": the shield then claims a lower level or none.
  */
-import type { CardShieldState, SovereigntyFacts } from "./sovereignty-score";
+import { keyMarkOf, type CardShieldState, type SovereigntyFacts } from "./sovereignty-score";
 
 function logFailure(what: string, err: unknown) {
   console.error(`[shield] ${what} lookup failed`, err instanceof Error ? err.message : "unknown error");
@@ -66,6 +66,22 @@ export async function sovereigntyFacts(userId: string): Promise<SovereigntyFacts
     }
   }
 
-  // Stap 5 (FIDO MDS3) is not built: passkeys are registered without attestation.
-  return { password, passkeys, card, cardState, attestedKey: false };
+  // Stap 5: per-passkey verdicts from vault_enclave (db-pending/0271). Not installed yet:
+  // every passkey is honestly "unattested". Lookup failure: unknown (null), never higher.
+  let passkeyMarks: SovereigntyFacts["passkeyMarks"] = null;
+  if (authUserId && passkeys) {
+    try {
+      const list = (await sql`
+        select p."credentialID" as cid, p.name as name from neon_auth.passkey p
+         where p."userId"::text = ${authUserId} order by p."createdAt", p.id`) as { cid: string; name: string | null }[];
+      const { vaultPort } = await import("@/lib/vault/vault-port.server");
+      const port = vaultPort();
+      const flags = (await port.passkeyAttestationAvailable()) ? await port.passkeyAttestationFlags({ userId }) : [];
+      const byId = new Map(flags.map((f) => [f.credentialId, f]));
+      passkeyMarks = list.map((p) => ({ name: typeof p.name === "string" ? p.name.slice(0, 80) : null, mark: keyMarkOf(byId.get(p.cid) ?? null) }));
+    } catch (err) {
+      logFailure("attestation", err);
+    }
+  }
+  return { password, passkeys, card, cardState, passkeyMarks };
 }

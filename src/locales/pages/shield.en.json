@@ -8,7 +8,7 @@
   "shield.level.3.title": "Hardware enclave",
   "shield.level.1.body": "Your password never leaves your device (OPAQUE + Argon2id). Add a passkey or ROUT Card for hardware protection.",
   "shield.level.2.body": "Passkey linked: sign in with biometrics or a PIN, resistant to phishing.",
-  "shield.level.3.body": "ROUT Card linked: your key lives in a chip you hold yourself.",
+  "shield.level.3.body": "ROUT Card linked and a certified hardware key (FIPS 140-3 level 3 or CC EAL6+), confirmed by the FIDO Alliance.",
   "shield.unknown.short": "Status",
   "shield.unknown.title": "Status unknown",
   "shield.unknown.body": "We couldn't check your security right now. Please try again later.",
@@ -45,5 +45,15 @@
   "shield.change.down.card_removed": "Your shield is now at {{level}} because your ROUT Card is no longer active.",
   "shield.change.down.factor_removed": "Your shield is now at {{level}} because a security factor was removed.",
   "shield.info": "The shield is information for you only. It never decides access and nobody else sees it.",
-  "shield.close": "Close"
+  "shield.close": "Close",
+  "shield.notice.card_needs_certified_key": "Your ROUT Card is active. Hardware enclave also needs a passkey on certified hardware, such as a security key. Your current passkeys keep working.",
+  "shield.notice.key_unsafe": "The FIDO Alliance reports a security issue with one of your keys. Replace it if you can; signing in keeps working.",
+  "shield.notice.key_status_unknown": "We could not check the hardware status of your passkeys, so we show no higher level.",
+  "shield.next.add_certified_key": "Add a hardware key",
+  "shield.keys.label": "Your passkeys",
+  "shield.key.certified": "{{name}}: certified hardware",
+  "shield.key.attested": "{{name}}: genuine hardware, not certified high enough",
+  "shield.key.unattested": "{{name}}: hardware not confirmed",
+  "shield.key.unsafe": "{{name}}: security issue reported",
+  "shield.key.unnamed": "Passkey"
 }

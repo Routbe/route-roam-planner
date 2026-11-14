@@ -10,8 +10,11 @@
  *  - Level 3 needs an active ROUT Card AND a passkey (decision A). A card next to
  *    only a password stays level 1, with a hint to add a passkey.
  *  - A frozen card suspends level 3 (decision B): back to 2 (or 1) with a notice.
- *  - A FIDO MDS3-attested hardware key counts for level 3 only from Stap 5; until
- *    then the server always reports `attestedKey: false`.
+ *  - Stap 5 (owner decision 2026-11-14, Level 9): level 3 needs an active card AND a
+ *    passkey whose FIDO MDS3 attestation proves certified hardware (FIPS 140-3 L3+ or
+ *    CC EAL6+) and that MDS3 does not list as compromised. An attested but uncertified
+ *    key, or no attestation at all (iCloud/Google sync), stays level 2 and keeps working.
+ *  - A key MDS3 lists as compromised is shown as unsafe; it never blocks anything.
  */
 
 export type ShieldLevel = 1 | 2 | 3;
@@ -28,12 +31,16 @@ export interface SovereigntyFacts {
   /** Activated, unrevoked physical ROUT Card (vault_enclave.member_card_factor). */
   card: boolean | null;
   cardState: CardShieldState;
-  /** FIDO MDS3-attested hardware key (Stap 5). */
-  attestedKey: boolean;
+  /** Stap 5 verdict per passkey (oldest first); null = lookup failed. */
+  passkeyMarks: readonly PasskeyMark[] | null;
 }
 
-export type ShieldNotice = "card_frozen" | "card_needs_passkey" | "card_status_unknown";
-export type ShieldNextStep = "add_passkey" | "add_card" | "unfreeze_card";
+/** certified = attested + safe + FIPS 140-3 L3+/CC EAL6+; unsafe = listed as compromised by MDS3. */
+export type KeyMark = "certified" | "attested" | "unsafe" | "unattested";
+export type PasskeyMark = { name: string | null; mark: KeyMark };
+
+export type ShieldNotice = "card_frozen" | "card_needs_passkey" | "card_status_unknown" | "card_needs_certified_key" | "key_unsafe" | "key_status_unknown";
+export type ShieldNextStep = "add_passkey" | "add_card" | "unfreeze_card" | "add_certified_key";
 export type PasskeyStorage = "device" | "synced" | "mixed";
 
 export interface SovereigntyHealthScore {
@@ -43,6 +50,8 @@ export interface SovereigntyHealthScore {
   passkeyStorage: PasskeyStorage | null;
   notices: ShieldNotice[];
   nextStep: ShieldNextStep | null;
+  /** Per-passkey hardware marks for the panel; null = unknown. */
+  keyMarks: readonly PasskeyMark[] | null;
 }
 
 function storageOf(p: NonNullable<SovereigntyFacts["passkeys"]>): PasskeyStorage | null {
@@ -61,8 +70,11 @@ export function getSovereigntyHealthScore(facts: SovereigntyFacts): SovereigntyH
   const cardUnknown = facts.card === null || (owned && (facts.cardState === "unavailable" || facts.cardState === null));
   const card: SovereigntyHealthScore["factors"]["card"] = cardActive ? "active" : cardSuspended ? "frozen" : cardUnknown ? "unknown" : "none";
 
+  const marks = passkey === true ? facts.passkeyMarks : passkey === false ? [] : null;
+  const certifiedKey = marks?.some((m) => m.mark === "certified") === true;
+
   let level: ShieldLevel | null = null;
-  if (passkey === true && (cardActive || facts.attestedKey)) level = 3;
+  if (passkey === true && cardActive && certifiedKey) level = 3;
   else if (passkey === true) level = 2;
   else if (passkey === false && facts.password === true) level = 1;
 
@@ -71,11 +83,19 @@ export function getSovereigntyHealthScore(facts: SovereigntyFacts): SovereigntyH
     if (owned && facts.cardState === "frozen") notices.push("card_frozen");
     if (cardActive && passkey === false) notices.push("card_needs_passkey");
     if (cardUnknown && level < 3) notices.push("card_status_unknown");
+    if (cardActive && passkey === true && marks !== null && !certifiedKey) notices.push("card_needs_certified_key");
+    if (passkey === true && marks === null) notices.push("key_status_unknown");
+    if (marks?.some((m) => m.mark === "unsafe")) notices.push("key_unsafe");
   }
 
   let nextStep: ShieldNextStep | null = null;
   if (level === 1) nextStep = "add_passkey";
-  else if (level === 2) nextStep = card === "frozen" && facts.cardState === "frozen" ? "unfreeze_card" : card === "none" ? "add_card" : null;
+  else if (level === 2) {
+    nextStep = card === "frozen" && facts.cardState === "frozen" ? "unfreeze_card"
+      : card === "none" ? "add_card"
+      : cardActive && marks !== null && !certifiedKey ? "add_certified_key"
+      : null;
+  }
 
   return {
     level,
@@ -83,10 +103,19 @@ export function getSovereigntyHealthScore(facts: SovereigntyFacts): SovereigntyH
     passkeyStorage: facts.passkeys ? storageOf(facts.passkeys) : null,
     notices,
     nextStep,
+    keyMarks: marks,
   };
 }
 
 export type ShieldChangeReason = "passkey_removed" | "card_frozen" | "card_removed" | "factor_removed";
+
+/** Maps one stored verdict to its mark; no verdict is "unattested", never more. */
+export function keyMarkOf(flags: { attested: boolean; statusSafe: boolean | null; certifiedL3: boolean } | null): KeyMark {
+  if (!flags) return "unattested";
+  if (flags.statusSafe === false) return "unsafe";
+  if (!flags.attested) return "unattested";
+  return flags.certifiedL3 && flags.statusSafe === true ? "certified" : "attested";
+}
 export type ShieldChange = { direction: "up"; level: ShieldLevel } | { direction: "down"; level: ShieldLevel; reason: ShieldChangeReason };
 
 /** What changed between two readings of the same member; null when the level did not move or is unknown. */

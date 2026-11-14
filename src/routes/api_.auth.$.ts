@@ -166,7 +166,44 @@ export async function handleAuthRequest({ request }: { request: Request }) {
       return Response.json({ code: "not_available", message: "Herstelcodes worden alleen gehasht bewaard." }, { status: 410 });
     }
 
+    // Stap 5: verify the hardware attestation ourselves, then hand Better Auth the same
+    // registration with fmt "none", so a broken or unknown statement can never block it.
+    let attestation: { credentialId: string; verdict: import("@/lib/auth/passkey-attestation.server").AttestationVerdict } | null = null;
+    if (request.method === "POST" && relativePath === "/passkey/verify-registration") {
+      const body = (await request.clone().json().catch(() => null)) as { response?: import("@simplewebauthn/server").RegistrationResponseJSON } & Record<string, unknown> | null;
+      if (body?.response?.response?.attestationObject && typeof body.response.id === "string") {
+        const { verdictWithinBudget } = await import("@/lib/auth/passkey-attestation-record.server");
+        const { stripAttestation } = await import("@/lib/auth/passkey-attestation.server");
+        const verdict = await verdictWithinBudget(body.response);
+        const stripped = await stripAttestation(body.response);
+        if (stripped) {
+          attestation = { credentialId: body.response.id, verdict };
+          const headers = new Headers(request.headers);
+          headers.delete("content-length");
+          request = new Request(request.url, { method: "POST", headers, body: JSON.stringify({ ...body, response: stripped }) });
+        }
+      }
+    }
+
     const res = await auth.handler(request);
+    if (relativePath === "/passkey/generate-register-options" && res.ok) {
+      // Ask for the authenticator's attestation; only this field changes, the challenge stays.
+      const options = await res.json() as Record<string, unknown>;
+      return Response.json({ ...options, attestation: "direct" }, { status: res.status, headers: res.headers });
+    }
+    if (attestation && res.ok) {
+      try {
+        const { sql } = await import("@/lib/neon");
+        const owner = sessionUserId ?? ((await sql`select "userId" as uid from neon_auth.passkey where "credentialID" = ${attestation.credentialId} limit 1`) as { uid: string }[])[0]?.uid ?? null;
+        if (owner) {
+          const { recordVerdict } = await import("@/lib/auth/passkey-attestation-record.server");
+          const outcome = await recordVerdict(owner, attestation.credentialId, attestation.verdict);
+          console.info("[attestation]", { outcome, attested: attestation.verdict.attested, reason: attestation.verdict.attested ? null : attestation.verdict.reason });
+        }
+      } catch (err) {
+        console.error("[attestation] persist skipped", err instanceof Error ? err.name : "error");
+      }
+    }
     if (relativePath === "/passkey/generate-authenticate-options" && res.ok) {
       // Ensure the browser requests biometric/PIN verification; the verified hook also checks UV.
       const options = await res.json() as Record<string, unknown>;
