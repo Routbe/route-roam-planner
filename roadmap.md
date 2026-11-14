@@ -158,7 +158,16 @@
   - [x] 0271 live op Neon (GO eigenaar 2026-11-14)
   - [ ] Android Key: KeyDescription-niveaus en RootOfTrust parsen (telt nu nooit als geattesteerd)
   - [ ] Eerste echte registratie met een beveiligingssleutel na deploy (vereist ROUT_VAULT_KEK)
-- [ ] Stap 7: anonieme boekingsmotor (pseudoniem per host, blinde BBS+-credentials, Bulletproofs-bereikbewijs, nullifiers, db-pending/0273 + rollback) — wacht op keuzes eigenaar (epoch, bibliotheek)
+- [ ] Stap 7: anonieme boekingsmotor (besluiten eigenaar 2026-11-14: pseudoniem per boeking, eigen allocatorvrije Rust-Wasm op zkcrypto bls12_381)
+  - [ ] Nieuwe gepinde Wasm-module (vast geheugen, geen allocator, reproduceerbare build, SHA-384-pin, wissen bij teardown)
+  - [ ] BBS (IETF-draft, BLS12-381-SHA-256) + blind tekenen; getoetst aan de officiële fixtures
+  - [ ] Forward-secure sleutel per epoch (oude epochsleutels niet afleidbaar uit nieuwere)
+  - [ ] Pedersen-commitments + Bulletproofs: a ≤ t ≤ b en Σcᵢ ≤ C
+  - [ ] Poseidon-SMT voor nullifiers met (non-)membership-bewijzen; hergebruik geweigerd
+  - [ ] pseudonyms.ts (per boeking), TS-wrappers in de crypto-enclave
+  - [ ] db-pending/0273 + rollback (deny-all, definers, audit-acties) + PGlite-test
+  - [ ] Volledige suite + typecheck
+  - [ ] 0273 op Neon — wacht op handmatige GO eigenaar
 - [ ] Stap 8: hybride PQ-ratchet + RVE2
 - [ ] Stap 9: RLS non-interference-model (Z3/Lean) vergeleken met de snapshot in CI
 - [x] /secure/*-documenten met COOP/COEP (wachtwoordpagina's)
