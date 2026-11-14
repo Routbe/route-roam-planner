@@ -23,11 +23,12 @@
 import { SettingsService } from "@simplewebauthn/server";
 import { verifyMDSBlob } from "@simplewebauthn/server/helpers";
 import { GlobalSign_Root_CA_R3 } from "./fido-mds3-roots";
+import { ROOT_PINS } from "./fido-root-pins";
 import { pemSha256Hex } from "./fido-pem";
 
 export const MDS3_URL = "https://mds3.fidoalliance.org/";
 /** SHA-256 of the DER of GlobalSign Root CA - R3 (FIDO MDS3 root). */
-export const FIDO_MDS_ROOT_SHA256 = "cbb522d7b7f127ad6a0113865bdf1cd4102e7d0759af635a7cf4720dc963c53b";
+export const FIDO_MDS_ROOT_SHA256: string = ROOT_PINS.mds[0];
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 export const FALLBACK_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_BLOB_BYTES = 16 * 1024 * 1024;
