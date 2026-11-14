@@ -158,7 +158,7 @@
   - [x] 0271 live op Neon (GO eigenaar 2026-11-14)
   - [ ] Android Key: KeyDescription-niveaus en RootOfTrust parsen (telt nu nooit als geattesteerd)
   - [ ] Eerste echte registratie met een beveiligingssleutel na deploy (vereist ROUT_VAULT_KEK)
-- [ ] Stap 7: gasten zonder spoor (pseudoniem per epoch, BBS+, blinde buckets, ZK-range op commitment)
+- [ ] Stap 7: anonieme boekingsmotor (pseudoniem per host, blinde BBS+-credentials, Bulletproofs-bereikbewijs, nullifiers, db-pending/0273 + rollback) — wacht op keuzes eigenaar (epoch, bibliotheek)
 - [ ] Stap 8: hybride PQ-ratchet + RVE2
 - [ ] Stap 9: RLS non-interference-model (Z3/Lean) vergeleken met de snapshot in CI
 - [x] /secure/*-documenten met COOP/COEP (wachtwoordpagina's)
@@ -173,5 +173,5 @@
   - [x] Server-stappen (RecoveryV4Store) + PGlite-scenariotest per modelactie
   - [x] Tests: 3-uit-4, 2-uit-4 faalt, foute hash, rotatie, nul-geheugen, PGlite 0272 + rollback; typecheck
   - [ ] Server-functies + schermen die RecoveryV4Store aanroepen (crypto in de enclave-worker); cron voor recovery_v4_expire_due
-  - [ ] 0268/0269 archiveren of niet — besluit eigenaar
-  - [ ] 0272 op Neon — wacht op handmatige GO eigenaar
+  - [x] 0268/0269 naar db-archive/ (eigenaar 2026-11-14)
+  - [x] 0272 live op Neon (GO eigenaar 2026-11-14), byte-gelijk met de replay

@@ -26787,7 +26787,7 @@
         {
           "name": "audit_logs_action_check",
           "kind": "c",
-          "def": "CHECK ((action = ANY (ARRAY['step_up_register'::text, 'token_store'::text, 'token_retrieve'::text, 'server_key_register'::text, 'sdm_card_register'::text, 'sdm_recovery_retrieve'::text, 'sdm_recovery_confirm'::text, 'sdm_fleet_register'::text, 'sdm_batch_register'::text, 'sdm_batch_cards_register'::text, 'sdm_tap_begin'::text, 'sdm_tap_confirm'::text, 'sdm_tap_consume'::text, 'sdm_card_activate'::text, 'sdm_batch_list'::text, 'sdm_batch_export'::text, 'sdm_station_register'::text, 'sdm_station_list'::text, 'sdm_station_retire'::text, 'card_step_up_begin'::text, 'card_step_up_complete'::text, 'card_step_up_claim'::text, 'sdm_card_revoke'::text, 'pake_setup_register'::text, 'pake_register'::text, 'pake_signup_register'::text, 'pake_unregister'::text, 'pake_login'::text, 'passkey_attestation_record'::text])))"
+          "def": "CHECK ((action = ANY (ARRAY['step_up_register'::text, 'token_store'::text, 'token_retrieve'::text, 'server_key_register'::text, 'sdm_card_register'::text, 'sdm_recovery_retrieve'::text, 'sdm_recovery_confirm'::text, 'sdm_fleet_register'::text, 'sdm_batch_register'::text, 'sdm_batch_cards_register'::text, 'sdm_tap_begin'::text, 'sdm_tap_confirm'::text, 'sdm_tap_consume'::text, 'sdm_card_activate'::text, 'sdm_batch_list'::text, 'sdm_batch_export'::text, 'sdm_station_register'::text, 'sdm_station_list'::text, 'sdm_station_retire'::text, 'card_step_up_begin'::text, 'card_step_up_complete'::text, 'card_step_up_claim'::text, 'sdm_card_revoke'::text, 'pake_setup_register'::text, 'pake_register'::text, 'pake_signup_register'::text, 'pake_unregister'::text, 'pake_login'::text, 'passkey_attestation_record'::text, 'recovery_v4_begin'::text, 'recovery_v4_confirm'::text, 'recovery_v4_commit'::text, 'recovery_v4_abort'::text, 'recovery_v4_remove'::text, 'recovery_v4_expire'::text, 'recovery_v4_replay'::text, 'recovery_v4_compromise'::text, 'recovery_v4_server_share'::text])))"
         },
         {
           "name": "audit_logs_entry_hash_key",
@@ -27574,6 +27574,436 @@
       "triggers": [
         "CREATE TRIGGER passkey_attestations_guard BEFORE UPDATE ON vault_enclave.passkey_attestations FOR EACH ROW EXECUTE FUNCTION vault_enclave.passkey_attestations_guard()"
       ],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_ceremonies",
+      "columns": [
+        {
+          "name": "ceremony_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "policy",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "generation",
+          "type": "integer",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "card_id",
+          "type": "uuid",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": "clock_timestamp()",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "pending_root",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "sealed_root",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "shard_user_kek",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "shard_server",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "shard_paper",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "shard_card",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "commit_user_kek",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "commit_server",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "commit_paper",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "commit_card",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "recovery_v4_cer_card",
+          "kind": "c",
+          "def": "CHECK (((policy = '3of4'::text) OR (card_id IS NULL)))"
+        },
+        {
+          "name": "recovery_v4_cer_commit_len",
+          "kind": "c",
+          "def": "CHECK (((COALESCE(octet_length(commit_user_kek), 32) = 32) AND (COALESCE(octet_length(commit_server), 32) = 32) AND (COALESCE(octet_length(commit_paper), 32) = 32) AND (COALESCE(octet_length(commit_card), 32) = 32)))"
+        },
+        {
+          "name": "recovery_v4_cer_ended",
+          "kind": "c",
+          "def": "CHECK (((status = ANY (ARRAY['pending'::text, 'active'::text])) = (ended_at IS NULL)))"
+        },
+        {
+          "name": "recovery_v4_cer_envelopes",
+          "kind": "c",
+          "def": "CHECK ((((shard_user_kek IS NULL) OR vault_enclave.recovery_v4_is_mpc(shard_user_kek, 33)) AND ((shard_server IS NULL) OR vault_enclave.recovery_v4_is_mpc(shard_server, 33)) AND ((shard_paper IS NULL) OR vault_enclave.recovery_v4_is_mpc(shard_paper, 33)) AND ((shard_card IS NULL) OR vault_enclave.recovery_v4_is_mpc(shard_card, 33)) AND ((pending_root IS NULL) OR vault_enclave.recovery_v4_is_mpc(pending_root, 72))))"
+        },
+        {
+          "name": "recovery_v4_cer_gen",
+          "kind": "c",
+          "def": "CHECK ((generation >= 1))"
+        },
+        {
+          "name": "recovery_v4_cer_halfopen",
+          "kind": "c",
+          "def": "CHECK (((status <> 'active'::text) OR (policy <> '3of4'::text) OR (card_id IS NOT NULL)))"
+        },
+        {
+          "name": "recovery_v4_cer_kind",
+          "kind": "c",
+          "def": "CHECK ((kind = ANY (ARRAY['setup'::text, 'upgrade'::text, 'downgrade'::text, 'rotate'::text])))"
+        },
+        {
+          "name": "recovery_v4_cer_policy",
+          "kind": "c",
+          "def": "CHECK ((policy = ANY (ARRAY['2of3'::text, '3of4'::text])))"
+        },
+        {
+          "name": "recovery_v4_cer_sealed_len",
+          "kind": "c",
+          "def": "CHECK (((sealed_root IS NULL) OR (octet_length(sealed_root) = 72)))"
+        },
+        {
+          "name": "recovery_v4_cer_shape",
+          "kind": "c",
+          "def": "CHECK (\nCASE status\n    WHEN 'pending'::text THEN ((pending_root IS NOT NULL) AND (sealed_root IS NULL))\n    WHEN 'active'::text THEN ((pending_root IS NULL) AND (sealed_root IS NOT NULL))\n    ELSE ((pending_root IS NULL) AND (sealed_root IS NULL) AND (shard_user_kek IS NULL) AND (shard_server IS NULL) AND (shard_paper IS NULL) AND (shard_card IS NULL))\nEND)"
+        },
+        {
+          "name": "recovery_v4_cer_shards",
+          "kind": "c",
+          "def": "CHECK (((status = ANY (ARRAY['revoked'::text, 'aborted'::text])) OR ((shard_user_kek IS NOT NULL) AND (shard_server IS NOT NULL) AND (shard_paper IS NOT NULL) AND ((shard_card IS NOT NULL) = (policy = '3of4'::text)) AND (commit_user_kek IS NOT NULL) AND (commit_server IS NOT NULL) AND (commit_paper IS NOT NULL) AND ((commit_card IS NOT NULL) = (policy = '3of4'::text)))))"
+        },
+        {
+          "name": "recovery_v4_cer_status",
+          "kind": "c",
+          "def": "CHECK ((status = ANY (ARRAY['pending'::text, 'active'::text, 'revoked'::text, 'aborted'::text])))"
+        },
+        {
+          "name": "recovery_v4_cer_ttl",
+          "kind": "c",
+          "def": "CHECK ((expires_at = (created_at + '00:10:00'::interval)))"
+        },
+        {
+          "name": "recovery_v4_ceremonies_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (ceremony_id)"
+        },
+        {
+          "name": "recovery_v4_ceremonies_user_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (user_id) REFERENCES vault_enclave.recovery_v4_vaults(user_id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX recovery_v4_pending_due ON vault_enclave.recovery_v4_ceremonies USING btree (expires_at) WHERE (status = 'pending'::text)",
+        "CREATE UNIQUE INDEX recovery_v4_one_active ON vault_enclave.recovery_v4_ceremonies USING btree (user_id) WHERE (status = 'active'::text)",
+        "CREATE UNIQUE INDEX recovery_v4_one_pending ON vault_enclave.recovery_v4_ceremonies USING btree (user_id) WHERE (status = 'pending'::text)"
+      ],
+      "triggers": [],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_idempotency",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "idem_key",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "op",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "request_digest",
+          "type": "bytea",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "answer",
+          "type": "jsonb",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": "clock_timestamp()",
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "recovery_v4_idem_digest",
+          "kind": "c",
+          "def": "CHECK ((octet_length(request_digest) = 32))"
+        },
+        {
+          "name": "recovery_v4_idem_key",
+          "kind": "c",
+          "def": "CHECK (((idem_key ~ '^[A-Za-z0-9_-]+$'::text) AND ((length(idem_key) >= 16) AND (length(idem_key) <= 64))))"
+        },
+        {
+          "name": "recovery_v4_idempotency_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (user_id, idem_key)"
+        },
+        {
+          "name": "recovery_v4_idempotency_user_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (user_id) REFERENCES vault_enclave.recovery_v4_vaults(user_id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [],
+      "triggers": [],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_vaults",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "level",
+          "type": "text",
+          "notNull": true,
+          "default": "'none'::text",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "ver",
+          "type": "bigint",
+          "notNull": true,
+          "default": "0",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "generation",
+          "type": "integer",
+          "notNull": true,
+          "default": "0",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "next_generation",
+          "type": "integer",
+          "notNull": true,
+          "default": "1",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "compromised",
+          "type": "text[]",
+          "notNull": true,
+          "default": "'{}'::text[]",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": "clock_timestamp()",
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "recovery_v4_vaults_comp",
+          "kind": "c",
+          "def": "CHECK (((compromised <@ ARRAY['user_kek'::text, 'paper'::text, 'card'::text]) AND ((level <> 'none'::text) OR (compromised = '{}'::text[])) AND ((level = '3of4'::text) OR (NOT ('card'::text = ANY (compromised))))))"
+        },
+        {
+          "name": "recovery_v4_vaults_gen",
+          "kind": "c",
+          "def": "CHECK ((((level = 'none'::text) = (generation = 0)) AND (generation >= 0) AND (next_generation > generation)))"
+        },
+        {
+          "name": "recovery_v4_vaults_level",
+          "kind": "c",
+          "def": "CHECK ((level = ANY (ARRAY['none'::text, '2of3'::text, '3of4'::text])))"
+        },
+        {
+          "name": "recovery_v4_vaults_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (user_id)"
+        },
+        {
+          "name": "recovery_v4_vaults_user_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [],
+      "triggers": [],
       "rls": true,
       "forceRls": false,
       "policies": [],
@@ -31187,6 +31617,150 @@
       "name": "record_passkey_attestation",
       "args": "p_credential_id text, p_fmt text, p_attested boolean, p_status_safe boolean, p_certified_l3 boolean, p_envelope bytea",
       "def": "CREATE OR REPLACE FUNCTION vault_enclave.record_passkey_attestation(p_credential_id text, p_fmt text, p_attested boolean, p_status_safe boolean, p_certified_l3 boolean, p_envelope bytea)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v_auth uuid;\n  v_rows integer;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'passkey_attestation_record', 'denied', 'no_caller', null); return false;\n  end if;\n  v_auth := vault_enclave.passkey_attestation_identity(v_caller);\n  if v_auth is null then\n    perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'denied', 'no_identity', null); return false;\n  end if;\n  if not exists (\n    select 1 from neon_auth.passkey p\n     where p.\"credentialID\" = p_credential_id and p.\"userId\" = v_auth::text\n       and p.\"createdAt\" > pg_catalog.clock_timestamp() - interval '10 minutes'\n       and p.\"createdAt\" <= pg_catalog.clock_timestamp() + interval '5 seconds') then\n    perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'denied', 'not_own_fresh_passkey', null); return false;\n  end if;\n  begin\n    insert into vault_enclave.passkey_attestations (credential_id, auth_user_id, fmt, attested, status_safe, certified_l3, envelope)\n    values (p_credential_id, v_auth, p_fmt, p_attested, p_status_safe, p_certified_l3, p_envelope)\n    on conflict (credential_id) do nothing;\n    get diagnostics v_rows = row_count;\n  exception when check_violation or not_null_violation then\n    perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'denied', 'malformed', null); return false;\n  end;\n  if v_rows = 0 then\n    perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'denied', 'already_recorded', null); return false;\n  end if;\n  perform vault_enclave.append_audit(v_caller, 'passkey_attestation_record', 'granted',\n    case when p_certified_l3 then 'certified_l3' when p_attested then 'attested' else 'not_attested' end, null);\n  return true;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_abort",
+      "args": "p_idem text, p_ceremony uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_abort(p_idem text, p_ceremony uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\n  v_ids record;\n  v_digest bytea;\n  v_prev jsonb;\n  v_ans jsonb;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'recovery_v4_abort', 'denied', 'no_caller', null);\n    return vault_enclave.recovery_v4_answer('abort', false, 'no_caller', null, null, null, null, null);\n  end if;\n  if not vault_enclave.recovery_v4_key_ok(p_idem) then\n    return vault_enclave.recovery_v4_answer('abort', false, 'malformed', null, null, null, null, null);\n  end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  v_digest := vault_enclave.recovery_v4_digest(array['abort', p_ceremony::text]);\n  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'abort', v_digest);\n  if v_prev is not null then return v_prev; end if;\n  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);\n  if p_ceremony is null or v_ids.p_pend is distinct from p_ceremony then\n    v_ans := vault_enclave.recovery_v4_answer('abort', false, 'gone', p_ceremony, v.ver, v.level, v_ids.p_pend, v_ids.p_act);\n    perform vault_enclave.append_audit(v_caller, 'recovery_v4_abort', 'denied', 'gone', null);\n    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'abort', v_digest, v_ans);\n  end if;\n  perform vault_enclave.recovery_v4_end(p_ceremony, 'aborted');\n  update vault_enclave.recovery_v4_vaults set ver = ver + 1, updated_at = pg_catalog.clock_timestamp()\n   where user_id = v_caller returning * into v;\n  v_ans := vault_enclave.recovery_v4_answer('abort', true, 'ok', p_ceremony, v.ver, v.level, null, v_ids.p_act);\n  perform vault_enclave.append_audit(v_caller, 'recovery_v4_abort', 'granted', 'ok', null);\n  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'abort', v_digest, v_ans);\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_answer",
+      "args": "p_op text, p_ok boolean, p_why text, p_cid uuid, p_ver bigint, p_level text, p_pend uuid, p_act uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_answer(p_op text, p_ok boolean, p_why text, p_cid uuid, p_ver bigint, p_level text, p_pend uuid, p_act uuid)\n RETURNS jsonb\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select pg_catalog.jsonb_build_object('op', p_op, 'ok', p_ok, 'why', p_why, 'cid', p_cid, 'ver', p_ver,\n                                       'level', p_level, 'pend', p_pend, 'act', p_act)\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_begin",
+      "args": "p_idem text, p_ver bigint, p_kind text, p_policy text, p_proof uuid, p_ceremony uuid, p_generation integer, p_pending_root bytea, p_shard_user_kek bytea, p_shard_server bytea, p_shard_paper bytea, p_shard_card bytea, p_commit_user_kek bytea, p_commit_server bytea, p_commit_paper bytea, p_commit_card bytea",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_begin(p_idem text, p_ver bigint, p_kind text, p_policy text, p_proof uuid, p_ceremony uuid, p_generation integer, p_pending_root bytea, p_shard_user_kek bytea, p_shard_server bytea, p_shard_paper bytea, p_shard_card bytea, p_commit_user_kek bytea, p_commit_server bytea, p_commit_paper bytea, p_commit_card bytea)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\n  v_ids record;\n  v_digest bytea;\n  v_prev jsonb;\n  v_why text;\n  v_ans jsonb;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'recovery_v4_begin', 'denied', 'no_caller', null);\n    return vault_enclave.recovery_v4_answer('begin', false, 'no_caller', null, null, null, null, null);\n  end if;\n  if not vault_enclave.recovery_v4_key_ok(p_idem) then\n    perform vault_enclave.append_audit(v_caller, 'recovery_v4_begin', 'denied', 'bad_key', null);\n    return vault_enclave.recovery_v4_answer('begin', false, 'malformed', null, null, null, null, null);\n  end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  v_digest := vault_enclave.recovery_v4_digest(array['begin', p_ver::text, p_kind, p_policy, p_proof::text, p_ceremony::text,\n    p_generation::text, pg_catalog.encode(pg_catalog.sha256(coalesce(p_pending_root, '')), 'hex'),\n    pg_catalog.encode(pg_catalog.sha256(coalesce(p_shard_user_kek, '') || coalesce(p_shard_server, '') || coalesce(p_shard_paper, '')\n      || coalesce(p_shard_card, '') || coalesce(p_commit_user_kek, '') || coalesce(p_commit_server, '')\n      || coalesce(p_commit_paper, '') || coalesce(p_commit_card, '')), 'hex')]);\n  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'begin', v_digest);\n  if v_prev is not null then return v_prev; end if;\n  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);\n\n  v_why := case\n    when p_ver is distinct from v.ver then 'conflict'\n    when v_ids.p_pend is not null then 'busy'\n    when not vault_enclave.recovery_v4_begin_ok(v.level, p_kind, p_policy) then 'invalid'\n    when not vault_enclave.recovery_v4_fresh(v_caller, p_proof) then 'stepup'\n    when p_ceremony is null or p_generation is distinct from v.next_generation\n      or exists (select 1 from vault_enclave.recovery_v4_ceremonies c where c.ceremony_id = p_ceremony)\n      or not vault_enclave.recovery_v4_is_mpc(p_pending_root, 72)\n      or not vault_enclave.recovery_v4_is_mpc(p_shard_user_kek, 33)\n      or not vault_enclave.recovery_v4_is_mpc(p_shard_server, 33)\n      or not vault_enclave.recovery_v4_is_mpc(p_shard_paper, 33)\n      or (p_policy = '3of4') <> (p_shard_card is not null)\n      or (p_shard_card is not null and not vault_enclave.recovery_v4_is_mpc(p_shard_card, 33))\n      or coalesce(octet_length(p_commit_user_kek), 0) <> 32 or coalesce(octet_length(p_commit_server), 0) <> 32\n      or coalesce(octet_length(p_commit_paper), 0) <> 32\n      or (p_policy = '3of4') <> (p_commit_card is not null) or coalesce(octet_length(p_commit_card), 32) <> 32\n      then 'malformed'\n    else 'ok' end;\n  if v_why <> 'ok' then\n    v_ans := vault_enclave.recovery_v4_answer('begin', false, v_why, null, v.ver, v.level, v_ids.p_pend, v_ids.p_act);\n    perform vault_enclave.append_audit(v_caller, 'recovery_v4_begin', 'denied', v_why, null);\n    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'begin', v_digest, v_ans);\n  end if;\n\n  insert into vault_enclave.recovery_v4_ceremonies (ceremony_id, user_id, kind, policy, generation, status, created_at, expires_at,\n    pending_root, shard_user_kek, shard_server, shard_paper, shard_card, commit_user_kek, commit_server, commit_paper, commit_card)\n  select p_ceremony, v_caller, p_kind, p_policy, p_generation, 'pending', t.now, t.now + interval '10 minutes',\n    p_pending_root, p_shard_user_kek, p_shard_server, p_shard_paper, p_shard_card,\n    p_commit_user_kek, p_commit_server, p_commit_paper, p_commit_card\n  from (select pg_catalog.clock_timestamp() as now) t;\n  update vault_enclave.recovery_v4_vaults set ver = ver + 1, next_generation = next_generation + 1,\n         updated_at = pg_catalog.clock_timestamp() where user_id = v_caller returning * into v;\n  perform vault_enclave.recovery_v4_consume(v_caller, p_proof);\n  v_ans := vault_enclave.recovery_v4_answer('begin', true, 'ok', p_ceremony, v.ver, v.level, p_ceremony, v_ids.p_act);\n  perform vault_enclave.append_audit(v_caller, 'recovery_v4_begin', 'granted', p_kind || ':' || p_policy, null);\n  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'begin', v_digest, v_ans);\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_begin_ok",
+      "args": "p_level text, p_kind text, p_policy text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_begin_ok(p_level text, p_kind text, p_policy text)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select case p_level\n    when 'none' then p_kind = 'setup' and p_policy in ('2of3', '3of4')\n    when '2of3' then (p_kind, p_policy) in (('upgrade', '3of4'), ('rotate', '2of3'))\n    when '3of4' then (p_kind, p_policy) in (('downgrade', '2of3'), ('rotate', '3of4'))\n    else false end\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_commit",
+      "args": "p_idem text, p_ver bigint, p_ceremony uuid, p_proof uuid, p_sealed_root bytea",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_commit(p_idem text, p_ver bigint, p_ceremony uuid, p_proof uuid, p_sealed_root bytea)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\n  c vault_enclave.recovery_v4_ceremonies%rowtype;\n  v_ids record;\n  v_digest bytea;\n  v_prev jsonb;\n  v_why text;\n  v_card_ok boolean;\n  v_ans jsonb;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'recovery_v4_commit', 'denied', 'no_caller', null);\n    return vault_enclave.recovery_v4_answer('commit', false, 'no_caller', null, null, null, null, null);\n  end if;\n  if not vault_enclave.recovery_v4_key_ok(p_idem) then\n    return vault_enclave.recovery_v4_answer('commit', false, 'malformed', null, null, null, null, null);\n  end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  v_digest := vault_enclave.recovery_v4_digest(array['commit', p_ver::text, p_ceremony::text, p_proof::text,\n    pg_catalog.encode(pg_catalog.sha256(coalesce(p_sealed_root, '')), 'hex')]);\n  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'commit', v_digest);\n  if v_prev is not null then return v_prev; end if;\n  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);\n  select * into c from vault_enclave.recovery_v4_ceremonies x\n   where x.ceremony_id = p_ceremony and x.user_id = v_caller and x.status = 'pending' for update;\n  -- A card unlinked (revoked) or moved since the tap resets the confirmation (model CardUnlink).\n  if c.ceremony_id is not null and c.card_id is not null then\n    select exists (select 1 from vault_enclave.sdm_batch_cards k\n                    where k.card_id = c.card_id and k.revoked_at is null and k.owner_user_id = v_caller) into v_card_ok;\n    if not v_card_ok then\n      update vault_enclave.recovery_v4_ceremonies set card_id = null where ceremony_id = c.ceremony_id;\n      c.card_id := null;\n    end if;\n  end if;\n\n  v_why := case\n    when p_ver is distinct from v.ver then 'conflict'\n    when c.ceremony_id is null then 'gone'\n    when c.policy = '3of4' and c.card_id is null then 'card'\n    when vault_enclave.recovery_v4_k(c.policy) < vault_enclave.recovery_v4_k(v.level)\n      and not vault_enclave.recovery_v4_fresh(v_caller, p_proof) then 'stepup'\n    when p_sealed_root is null or octet_length(p_sealed_root) <> 72 then 'malformed'\n    else 'ok' end;\n  if v_why <> 'ok' then\n    v_ans := vault_enclave.recovery_v4_answer('commit', false, v_why, p_ceremony, v.ver, v.level, v_ids.p_pend, v_ids.p_act);\n    perform vault_enclave.append_audit(v_caller, 'recovery_v4_commit', 'denied', v_why, null);\n    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'commit', v_digest, v_ans);\n  end if;\n  if v_ids.p_act is not null then\n    perform vault_enclave.recovery_v4_end(v_ids.p_act, 'revoked');\n  end if;\n  update vault_enclave.recovery_v4_ceremonies set status = 'active', pending_root = null, sealed_root = p_sealed_root\n   where ceremony_id = p_ceremony;\n  update vault_enclave.recovery_v4_vaults set level = c.policy, generation = c.generation, compromised = '{}',\n         ver = ver + 1, updated_at = pg_catalog.clock_timestamp()\n   where user_id = v_caller returning * into v;\n  perform vault_enclave.recovery_v4_consume(v_caller, p_proof);\n  v_ans := vault_enclave.recovery_v4_answer('commit', true, 'ok', p_ceremony, v.ver, v.level, null, p_ceremony);\n  perform vault_enclave.append_audit(v_caller, 'recovery_v4_commit', 'granted', c.kind || ':' || c.policy, null);\n  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'commit', v_digest, v_ans);\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_confirm_card",
+      "args": "p_idem text, p_ver bigint, p_ceremony uuid, p_tap_ref text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_confirm_card(p_idem text, p_ver bigint, p_ceremony uuid, p_tap_ref text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\n  c vault_enclave.recovery_v4_ceremonies%rowtype;\n  v_ids record;\n  v_digest bytea;\n  v_prev jsonb;\n  v_why text;\n  v_card uuid;\n  v_ok boolean := false;\n  v_ans jsonb;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'recovery_v4_confirm', 'denied', 'no_caller', null);\n    return vault_enclave.recovery_v4_answer('confirm', false, 'no_caller', null, null, null, null, null);\n  end if;\n  if not vault_enclave.recovery_v4_key_ok(p_idem) then\n    return vault_enclave.recovery_v4_answer('confirm', false, 'malformed', null, null, null, null, null);\n  end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  v_digest := vault_enclave.recovery_v4_digest(array['confirm', p_ver::text, p_ceremony::text,\n    pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(coalesce(p_tap_ref, ''), 'UTF8')), 'hex')]);\n  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'confirm', v_digest);\n  if v_prev is not null then return v_prev; end if;\n  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);\n  select * into c from vault_enclave.recovery_v4_ceremonies x\n   where x.ceremony_id = p_ceremony and x.user_id = v_caller and x.status = 'pending';\n\n  v_why := case\n    when p_ver is distinct from v.ver then 'conflict'\n    when c.ceremony_id is null then 'gone'\n    when c.policy <> '3of4' then 'invalid'\n    else null end;\n  if v_why is null then\n    if p_tap_ref is not null and p_tap_ref ~ '^tap_[0-9a-f]{64}$' then\n      select g.card_id into v_card from vault_enclave.sdm_tap_grants g\n       where g.grant_digest = pg_catalog.sha256(pg_catalog.convert_to(p_tap_ref, 'UTF8'));\n      select t.granted into v_ok from vault_enclave.consume_sdm_tap(p_tap_ref, 'recovery_factor') t;\n    end if;\n    v_why := case when coalesce(v_ok, false) and v_card is not null then 'ok' else 'card' end;\n  end if;\n  if v_why <> 'ok' then\n    v_ans := vault_enclave.recovery_v4_answer('confirm', false, v_why, p_ceremony, v.ver, v.level, v_ids.p_pend, v_ids.p_act);\n    perform vault_enclave.append_audit(v_caller, 'recovery_v4_confirm', 'denied', v_why, null);\n    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'confirm', v_digest, v_ans);\n  end if;\n  update vault_enclave.recovery_v4_ceremonies set card_id = v_card where ceremony_id = p_ceremony;\n  update vault_enclave.recovery_v4_vaults set ver = ver + 1, updated_at = pg_catalog.clock_timestamp()\n   where user_id = v_caller returning * into v;\n  v_ans := vault_enclave.recovery_v4_answer('confirm', true, 'ok', p_ceremony, v.ver, v.level, v_ids.p_pend, v_ids.p_act);\n  perform vault_enclave.append_audit(v_caller, 'recovery_v4_confirm', 'granted', 'ok', null);\n  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'confirm', v_digest, v_ans);\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_consume",
+      "args": "p_caller uuid, p_proof uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_consume(p_caller uuid, p_proof uuid)\n RETURNS void\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  update vault_enclave.step_up_proofs s set consumed_at = pg_catalog.clock_timestamp()\n   where s.proof_id = p_proof and s.user_id = p_caller and s.consumed_at is null\n     and s.verified_at >= pg_catalog.clock_timestamp() - interval '300 seconds'\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_digest",
+      "args": "p_parts text[]",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_digest(p_parts text[])\n RETURNS bytea\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select pg_catalog.sha256(pg_catalog.convert_to(pg_catalog.array_to_string(p_parts, '|', '~'), 'UTF8'))\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_end",
+      "args": "p_ceremony uuid, p_status text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_end(p_ceremony uuid, p_status text)\n RETURNS void\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  update vault_enclave.recovery_v4_ceremonies c\n     set status = p_status, ended_at = pg_catalog.clock_timestamp(),\n         pending_root = null, sealed_root = null,\n         shard_user_kek = null, shard_server = null, shard_paper = null, shard_card = null\n   where c.ceremony_id = p_ceremony\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_expire_due",
+      "args": "",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_expire_due()\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  r record;\n  n integer := 0;\nbegin\n  for r in select c.ceremony_id, c.user_id from vault_enclave.recovery_v4_ceremonies c\n            where c.status = 'pending' and c.expires_at <= pg_catalog.clock_timestamp()\n            order by c.expires_at limit 500 loop\n    perform 1 from vault_enclave.recovery_v4_vaults v where v.user_id = r.user_id for update skip locked;\n    if found then\n      perform vault_enclave.recovery_v4_end(r.ceremony_id, 'aborted');\n      update vault_enclave.recovery_v4_vaults set ver = ver + 1, updated_at = pg_catalog.clock_timestamp() where user_id = r.user_id;\n      perform vault_enclave.append_audit(r.user_id, 'recovery_v4_expire', 'granted', 'ttl', null);\n      n := n + 1;\n    end if;\n  end loop;\n  return n;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_factors",
+      "args": "p_policy text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_factors(p_policy text)\n RETURNS text[]\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select case p_policy when '3of4' then array['user_kek', 'server', 'paper', 'card']\n                       when '2of3' then array['user_kek', 'server', 'paper'] else '{}'::text[] end\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_fresh",
+      "args": "p_caller uuid, p_proof uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_fresh(p_caller uuid, p_proof uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select p_proof is not null and exists (\n    select 1 from vault_enclave.step_up_proofs s\n     where s.proof_id = p_proof and s.user_id = p_caller and s.method = 'passkey' and s.consumed_at is null\n       and s.verified_at >= pg_catalog.clock_timestamp() - interval '300 seconds'\n       and s.verified_at <= pg_catalog.clock_timestamp())\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_ids",
+      "args": "p_caller uuid, OUT p_pend uuid, OUT p_act uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_ids(p_caller uuid, OUT p_pend uuid, OUT p_act uuid)\n RETURNS record\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select (select c.ceremony_id from vault_enclave.recovery_v4_ceremonies c where c.user_id = p_caller and c.status = 'pending'),\n         (select c.ceremony_id from vault_enclave.recovery_v4_ceremonies c where c.user_id = p_caller and c.status = 'active')\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_is_mpc",
+      "args": "p_env bytea, p_plain integer",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_is_mpc(p_env bytea, p_plain integer)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select p_env is not null and octet_length(p_env) = 1663 + p_plain\n     and substring(p_env from 1 for 4) = '\\x52564531'::bytea\n     and pg_catalog.get_byte(p_env, 4) = 1 and pg_catalog.get_byte(p_env, 5) = 3 and pg_catalog.get_byte(p_env, 6) = 3\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_k",
+      "args": "p_level text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_k(p_level text)\n RETURNS integer\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select case p_level when '3of4' then 3 when '2of3' then 2 else 0 end\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_key_ok",
+      "args": "p_key text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_key_ok(p_key text)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select p_key is not null and p_key ~ '^[A-Za-z0-9_-]+$' and length(p_key) between 16 and 64\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_lock",
+      "args": "p_caller uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_lock(p_caller uuid)\n RETURNS vault_enclave.recovery_v4_vaults\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v vault_enclave.recovery_v4_vaults%rowtype;\n  v_due uuid;\nbegin\n  insert into vault_enclave.recovery_v4_vaults (user_id) values (p_caller) on conflict (user_id) do nothing;\n  select * into v from vault_enclave.recovery_v4_vaults where user_id = p_caller for update;\n  select c.ceremony_id into v_due from vault_enclave.recovery_v4_ceremonies c\n   where c.user_id = p_caller and c.status = 'pending' and c.expires_at <= pg_catalog.clock_timestamp();\n  if v_due is not null then\n    perform vault_enclave.recovery_v4_end(v_due, 'aborted');\n    update vault_enclave.recovery_v4_vaults set ver = ver + 1, updated_at = pg_catalog.clock_timestamp()\n     where user_id = p_caller returning * into v;\n    perform vault_enclave.append_audit(p_caller, 'recovery_v4_expire', 'granted', 'ttl', null);\n  end if;\n  delete from vault_enclave.recovery_v4_idempotency i\n   where i.user_id = p_caller and i.created_at < pg_catalog.clock_timestamp() - interval '1 day';\n  return v;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_material",
+      "args": "p_pending boolean",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_material(p_pending boolean)\n RETURNS TABLE(ceremony_id uuid, kind text, policy text, generation integer, sealed_root bytea, pending_root bytea, shard_user_kek bytea, shard_paper bytea, shard_card bytea, commit_user_kek bytea, commit_server bytea, commit_paper bytea, commit_card bytea)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\nbegin\n  if v_caller is null then return; end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  return query\n    select c.ceremony_id, c.kind, c.policy, c.generation, c.sealed_root, c.pending_root,\n           c.shard_user_kek, c.shard_paper, c.shard_card, c.commit_user_kek, c.commit_server, c.commit_paper, c.commit_card\n      from vault_enclave.recovery_v4_ceremonies c\n     where c.user_id = v_caller and c.status = case when coalesce(p_pending, false) then 'pending' else 'active' end;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_remove",
+      "args": "p_idem text, p_ver bigint, p_proof uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_remove(p_idem text, p_ver bigint, p_proof uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\n  v_ids record;\n  v_digest bytea;\n  v_prev jsonb;\n  v_why text;\n  v_ans jsonb;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'recovery_v4_remove', 'denied', 'no_caller', null);\n    return vault_enclave.recovery_v4_answer('remove', false, 'no_caller', null, null, null, null, null);\n  end if;\n  if not vault_enclave.recovery_v4_key_ok(p_idem) then\n    return vault_enclave.recovery_v4_answer('remove', false, 'malformed', null, null, null, null, null);\n  end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  v_digest := vault_enclave.recovery_v4_digest(array['remove', p_ver::text, p_proof::text]);\n  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'remove', v_digest);\n  if v_prev is not null then return v_prev; end if;\n  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);\n  v_why := case\n    when p_ver is distinct from v.ver then 'conflict'\n    when v.level = 'none' then 'invalid'\n    when not vault_enclave.recovery_v4_fresh(v_caller, p_proof) then 'stepup'\n    else 'ok' end;\n  if v_why <> 'ok' then\n    v_ans := vault_enclave.recovery_v4_answer('remove', false, v_why, null, v.ver, v.level, v_ids.p_pend, v_ids.p_act);\n    perform vault_enclave.append_audit(v_caller, 'recovery_v4_remove', 'denied', v_why, null);\n    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'remove', v_digest, v_ans);\n  end if;\n  if v_ids.p_act is not null then perform vault_enclave.recovery_v4_end(v_ids.p_act, 'revoked'); end if;\n  if v_ids.p_pend is not null then perform vault_enclave.recovery_v4_end(v_ids.p_pend, 'aborted'); end if;\n  update vault_enclave.recovery_v4_vaults set level = 'none', generation = 0, compromised = '{}',\n         ver = ver + 1, updated_at = pg_catalog.clock_timestamp()\n   where user_id = v_caller returning * into v;\n  perform vault_enclave.recovery_v4_consume(v_caller, p_proof);\n  v_ans := vault_enclave.recovery_v4_answer('remove', true, 'ok', null, v.ver, 'none', null, null);\n  perform vault_enclave.append_audit(v_caller, 'recovery_v4_remove', 'granted', 'ok', null);\n  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'remove', v_digest, v_ans);\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_replay",
+      "args": "p_caller uuid, p_key text, p_op text, p_digest bytea",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_replay(p_caller uuid, p_key text, p_op text, p_digest bytea)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare r vault_enclave.recovery_v4_idempotency%rowtype;\nbegin\n  select * into r from vault_enclave.recovery_v4_idempotency i where i.user_id = p_caller and i.idem_key = p_key;\n  if not found then return null; end if;\n  if r.op <> p_op or r.request_digest <> p_digest then\n    perform vault_enclave.append_audit(p_caller, 'recovery_v4_replay', 'denied', 'idem_mismatch', null);\n    return vault_enclave.recovery_v4_answer(p_op, false, 'idem_mismatch', null, null, null, null, null);\n  end if;\n  perform vault_enclave.append_audit(p_caller, 'recovery_v4_replay', 'granted', p_op, null);\n  return r.answer;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_report_compromise",
+      "args": "p_idem text, p_factor text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_report_compromise(p_idem text, p_factor text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\n  v_ids record;\n  v_digest bytea;\n  v_prev jsonb;\n  v_ans jsonb;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'recovery_v4_compromise', 'denied', 'no_caller', null);\n    return vault_enclave.recovery_v4_answer('compromise', false, 'no_caller', null, null, null, null, null);\n  end if;\n  if not vault_enclave.recovery_v4_key_ok(p_idem) then\n    return vault_enclave.recovery_v4_answer('compromise', false, 'malformed', null, null, null, null, null);\n  end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  v_digest := vault_enclave.recovery_v4_digest(array['compromise', p_factor]);\n  v_prev := vault_enclave.recovery_v4_replay(v_caller, p_idem, 'compromise', v_digest);\n  if v_prev is not null then return v_prev; end if;\n  select * into v_ids from vault_enclave.recovery_v4_ids(v_caller);\n  if v.level = 'none' or p_factor is null or p_factor = 'server'\n     or not (p_factor = any (vault_enclave.recovery_v4_factors(v.level))) or p_factor = any (v.compromised) then\n    v_ans := vault_enclave.recovery_v4_answer('compromise', false, 'invalid', null, v.ver, v.level, v_ids.p_pend, v_ids.p_act);\n    perform vault_enclave.append_audit(v_caller, 'recovery_v4_compromise', 'denied', 'invalid', null);\n    return vault_enclave.recovery_v4_store(v_caller, p_idem, 'compromise', v_digest, v_ans);\n  end if;\n  update vault_enclave.recovery_v4_vaults set compromised = compromised || p_factor, ver = ver + 1,\n         updated_at = pg_catalog.clock_timestamp() where user_id = v_caller returning * into v;\n  v_ans := vault_enclave.recovery_v4_answer('compromise', true, 'ok', null, v.ver, v.level, v_ids.p_pend, v_ids.p_act);\n  perform vault_enclave.append_audit(v_caller, 'recovery_v4_compromise', 'granted', p_factor, null);\n  return vault_enclave.recovery_v4_store(v_caller, p_idem, 'compromise', v_digest, v_ans);\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_server_share",
+      "args": "p_proof uuid",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_server_share(p_proof uuid)\n RETURNS TABLE(granted boolean, reason text, ceremony_id uuid, generation integer, policy text, shard bytea, exclude text[])\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\n  c vault_enclave.recovery_v4_ceremonies%rowtype;\n  v_comp text[];\n  v_danger boolean;\n  v_step boolean := false;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'recovery_v4_server_share', 'denied', 'no_caller', null);\n    return query select false, 'no_caller'::text, null::uuid, null::integer, null::text, null::bytea, null::text[]; return;\n  end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  select * into c from vault_enclave.recovery_v4_ceremonies x where x.user_id = v_caller and x.status = 'active';\n  if c.ceremony_id is null then\n    perform vault_enclave.append_audit(v_caller, 'recovery_v4_server_share', 'denied', 'no_vault', null);\n    return query select false, 'no_vault'::text, null::uuid, null::integer, null::text, null::bytea, null::text[]; return;\n  end if;\n  v_comp := v.compromised;\n  if c.policy = '3of4' and not ('card' = any (v_comp)) and not exists (\n       select 1 from vault_enclave.sdm_batch_cards k where k.card_id = c.card_id and k.revoked_at is null and k.owner_user_id = v_caller) then\n    v_comp := v_comp || 'card'::text;\n  end if;\n  v_danger := pg_catalog.cardinality(v_comp) + 1 >= vault_enclave.recovery_v4_k(c.policy);\n  if v_danger then\n    v_step := vault_enclave.recovery_v4_fresh(v_caller, p_proof);\n    if not v_step then\n      perform vault_enclave.append_audit(v_caller, 'recovery_v4_server_share', 'denied', 'step_up_required', null);\n      return query select false, 'step_up_required'::text, c.ceremony_id, c.generation, c.policy, null::bytea, v_comp; return;\n    end if;\n    perform vault_enclave.recovery_v4_consume(v_caller, p_proof);\n  end if;\n  perform vault_enclave.append_audit(v_caller, 'recovery_v4_server_share', 'granted',\n    case when v_step then 'step_up' when pg_catalog.cardinality(v_comp) > 0 then 'excluding' else 'ok' end, null);\n  return query select true, 'ok'::text, c.ceremony_id, c.generation, c.policy, c.shard_server,\n    case when v_step then '{}'::text[] else v_comp end;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_status",
+      "args": "",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_status()\n RETURNS TABLE(level text, ver bigint, generation integer, next_generation integer, compromised text[], pending_id uuid, pending_policy text, pending_expires_at timestamp with time zone, pending_card_confirmed boolean, active_id uuid)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v vault_enclave.recovery_v4_vaults%rowtype;\nbegin\n  if v_caller is null then return; end if;\n  v := vault_enclave.recovery_v4_lock(v_caller);\n  return query\n    select v.level, v.ver, v.generation, v.next_generation, v.compromised,\n           p.ceremony_id, p.policy, p.expires_at, p.card_id is not null, a.ceremony_id\n      from (select 1) one\n      left join vault_enclave.recovery_v4_ceremonies p on p.user_id = v_caller and p.status = 'pending'\n      left join vault_enclave.recovery_v4_ceremonies a on a.user_id = v_caller and a.status = 'active';\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "recovery_v4_store",
+      "args": "p_caller uuid, p_key text, p_op text, p_digest bytea, p_answer jsonb",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.recovery_v4_store(p_caller uuid, p_key text, p_op text, p_digest bytea, p_answer jsonb)\n RETURNS jsonb\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  insert into vault_enclave.recovery_v4_idempotency (user_id, idem_key, op, request_digest, answer)\n  values (p_caller, p_key, p_op, p_digest, p_answer) returning answer\n$function$"
     },
     {
       "schema": "vault_enclave",
